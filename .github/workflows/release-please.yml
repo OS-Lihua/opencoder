@@ -20,11 +20,8 @@ jobs:
       - uses: googleapis/release-please-action@v4
         id: release
         with:
-          release-type: rust
-          package-name: opencoder
-          # Bumps version in all workspace Cargo.toml files
-          extra-files: |
-            Cargo.toml
+          config-file: release-please-config.json
+          manifest-file: .release-please-manifest.json
 
   # When release-please merges a release PR (creates a tag),
   # trigger the build + publish pipeline

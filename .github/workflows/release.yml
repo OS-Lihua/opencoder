@@ -169,7 +169,7 @@ jobs:
           "$hash  ${{ env.ARCHIVE }}" | Out-File -FilePath "${{ env.ARCHIVE }}.sha256" -NoNewline
 
       - name: Upload artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: opencoder-${{ matrix.suffix }}
           path: |

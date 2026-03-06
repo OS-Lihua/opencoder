@@ -172,10 +172,10 @@ impl Config {
         }
 
         // 2. Custom config from env
-        if let Some(path) = flag::config_path() {
-            if let Some(c) = Self::load_file(Path::new(&path))? {
-                config = Self::merge(config, c);
-            }
+        if let Some(path) = flag::config_path()
+            && let Some(c) = Self::load_file(Path::new(&path))?
+        {
+            config = Self::merge(config, c);
         }
 
         // 3. Project config (walk up from project_dir)
@@ -205,10 +205,10 @@ impl Config {
         }
 
         // 5. Inline config from env
-        if let Some(content) = flag::config_content() {
-            if let Ok(c) = serde_json::from_str::<Config>(&content) {
-                config = Self::merge(config, c);
-            }
+        if let Some(content) = flag::config_content()
+            && let Ok(c) = serde_json::from_str::<Config>(&content)
+        {
+            config = Self::merge(config, c);
         }
 
         // 6. Managed config (enterprise, highest priority)
@@ -333,35 +333,35 @@ fn strip_jsonc_comments(input: &str) -> String {
             continue;
         }
 
-        if c == '/' {
-            if let Some(&next) = chars.peek() {
-                if next == '/' {
-                    // Line comment: skip until newline
-                    while let Some(nc) = chars.next() {
-                        if nc == '\n' {
-                            out.push('\n');
-                            break;
-                        }
+        if c == '/'
+            && let Some(&next) = chars.peek()
+        {
+            if next == '/' {
+                // Line comment: skip until newline
+                for nc in chars.by_ref() {
+                    if nc == '\n' {
+                        out.push('\n');
+                        break;
                     }
-                    continue;
-                } else if next == '*' {
-                    // Block comment: skip until */
-                    chars.next(); // consume *
-                    loop {
-                        match chars.next() {
-                            Some('*') => {
-                                if chars.peek() == Some(&'/') {
-                                    chars.next();
-                                    break;
-                                }
-                            }
-                            Some('\n') => out.push('\n'),
-                            None => break,
-                            _ => {}
-                        }
-                    }
-                    continue;
                 }
+                continue;
+            } else if next == '*' {
+                // Block comment: skip until */
+                chars.next(); // consume *
+                loop {
+                    match chars.next() {
+                        Some('*') => {
+                            if chars.peek() == Some(&'/') {
+                                chars.next();
+                                break;
+                            }
+                        }
+                        Some('\n') => out.push('\n'),
+                        None => break,
+                        _ => {}
+                    }
+                }
+                continue;
             }
         }
 

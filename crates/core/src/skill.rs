@@ -17,11 +17,7 @@ pub struct Skill {
 }
 
 /// Directories to search for skills.
-const SKILL_DIRS: &[&str] = &[
-    ".claude/skills",
-    ".agents/skills",
-    ".opencode/skills",
-];
+const SKILL_DIRS: &[&str] = &[".claude/skills", ".agents/skills", ".opencode/skills"];
 
 /// Discover skills in the project directory.
 pub fn discover(project_dir: &Path) -> Vec<Skill> {
@@ -49,10 +45,10 @@ fn scan_skill_dir(dir: &Path, skills: &mut Vec<Skill>) {
             scan_skill_dir(&path, skills);
             continue;
         }
-        if path.extension().is_some_and(|ext| ext == "md") {
-            if let Some(skill) = parse_skill_file(&path) {
-                skills.push(skill);
-            }
+        if path.extension().is_some_and(|ext| ext == "md")
+            && let Some(skill) = parse_skill_file(&path)
+        {
+            skills.push(skill);
         }
     }
 }

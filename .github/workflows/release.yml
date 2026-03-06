@@ -4,6 +4,20 @@ on:
   push:
     tags:
       - 'v*'
+  # Allow being called by release-please workflow
+  workflow_call:
+  # Allow manual trigger with version input
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to release (e.g., 0.2.0). Leave empty to use current Cargo.toml version.'
+        required: false
+        type: string
+      dry_run:
+        description: 'Dry run (build only, no release)'
+        required: false
+        type: boolean
+        default: false
 
 permissions:
   contents: write
@@ -13,19 +27,49 @@ env:
   CARGO_INCREMENTAL: 0
 
 jobs:
-  # Run full test suite before building release artifacts
+  # ─── Prepare: determine version and validate ────────────────────────
+  prepare:
+    name: Prepare release
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      tag: ${{ steps.version.outputs.tag }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Determine version
+        id: version
+        run: |
+          if [ -n "${{ inputs.version }}" ]; then
+            VERSION="${{ inputs.version }}"
+          elif [[ "$GITHUB_REF" == refs/tags/v* ]]; then
+            VERSION="${GITHUB_REF_NAME#v}"
+          else
+            # Read from Cargo.toml
+            VERSION=$(grep -m1 '^version' Cargo.toml | sed 's/.*"\(.*\)"/\1/')
+          fi
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+          echo "tag=v${VERSION}" >> "$GITHUB_OUTPUT"
+          echo "📦 Release version: ${VERSION}"
+
+  # ─── Test: full test suite before release ───────────────────────────
   test:
     name: Pre-release tests
+    needs: prepare
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
       - run: cargo test --all-features --workspace
+      - run: cargo clippy --all-targets --all-features -- -D warnings
 
+  # ─── Build: compile for all platforms ───────────────────────────────
   build:
     name: Build (${{ matrix.suffix }})
-    needs: test
+    needs: [prepare, test]
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
@@ -38,7 +82,7 @@ jobs:
           - os: ubuntu-latest
             target: x86_64-unknown-linux-musl
             suffix: linux-x64-musl
-            cross: true
+            cross: false
           - os: ubuntu-latest
             target: aarch64-unknown-linux-gnu
             suffix: linux-arm64
@@ -66,14 +110,12 @@ jobs:
 
       - uses: Swatinem/rust-cache@v2
         with:
-          key: ${{ matrix.target }}
+          key: release-${{ matrix.target }}
 
-      # Linux musl dependencies
       - name: Install musl-tools
         if: matrix.target == 'x86_64-unknown-linux-musl'
         run: sudo apt-get update && sudo apt-get install -y musl-tools
 
-      # Cross compilation
       - name: Install cross
         if: matrix.cross
         run: cargo install cross --locked
@@ -86,7 +128,6 @@ jobs:
         if: "!matrix.cross"
         run: cargo build --release --target ${{ matrix.target }} -p opencoder-cli
 
-      # Strip debug symbols
       - name: Strip binary (Unix)
         if: runner.os != 'Windows'
         run: |
@@ -94,32 +135,58 @@ jobs:
             strip target/${{ matrix.target }}/release/opencoder 2>/dev/null || true
           fi
 
-      # Package
+      - name: Get binary size
+        if: runner.os != 'Windows'
+        run: ls -lh target/${{ matrix.target }}/release/opencoder
+
       - name: Package (Unix)
         if: runner.os != 'Windows'
         run: |
+          VERSION="${{ needs.prepare.outputs.version }}"
+          ARCHIVE="opencoder-${VERSION}-${{ matrix.suffix }}.tar.gz"
           cd target/${{ matrix.target }}/release
-          tar czf ../../../opencoder-${{ matrix.suffix }}.tar.gz opencoder
+          tar czf "../../../${ARCHIVE}" opencoder
+          echo "ARCHIVE=${ARCHIVE}" >> "$GITHUB_ENV"
 
       - name: Package (Windows)
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
-          Compress-Archive -Path "target/${{ matrix.target }}/release/opencoder.exe" -DestinationPath "opencoder-${{ matrix.suffix }}.zip"
+          $VERSION = "${{ needs.prepare.outputs.version }}"
+          $ARCHIVE = "opencoder-${VERSION}-${{ matrix.suffix }}.zip"
+          Compress-Archive -Path "target/${{ matrix.target }}/release/opencoder.exe" -DestinationPath $ARCHIVE
+          "ARCHIVE=$ARCHIVE" | Out-File -FilePath $env:GITHUB_ENV -Append
+
+      - name: Generate checksum (Unix)
+        if: runner.os != 'Windows'
+        run: sha256sum "${{ env.ARCHIVE }}" > "${{ env.ARCHIVE }}.sha256"
+
+      - name: Generate checksum (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $hash = (Get-FileHash "${{ env.ARCHIVE }}" -Algorithm SHA256).Hash.ToLower()
+          "$hash  ${{ env.ARCHIVE }}" | Out-File -FilePath "${{ env.ARCHIVE }}.sha256" -NoNewline
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: opencoder-${{ matrix.suffix }}
-          path: opencoder-${{ matrix.suffix }}.*
-          retention-days: 1
+          path: |
+            opencoder-*.${{ runner.os == 'Windows' && 'zip' || 'tar.gz' }}
+            opencoder-*.sha256
+          retention-days: 3
 
+  # ─── Release: create GitHub release with all artifacts ──────────────
   release:
-    name: Create Release
-    needs: build
+    name: Publish GitHub Release
+    needs: [prepare, build]
+    if: ${{ !inputs.dry_run }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Download all artifacts
         uses: actions/download-artifact@v4
@@ -127,62 +194,97 @@ jobs:
           path: artifacts
           merge-multiple: true
 
-      - name: Generate checksums
+      - name: List artifacts
+        run: ls -lhR artifacts/
+
+      - name: Combine checksums
         run: |
           cd artifacts
-          sha256sum opencoder-* > checksums-sha256.txt
+          cat *.sha256 > checksums-sha256.txt
+          echo "=== SHA256 Checksums ==="
           cat checksums-sha256.txt
 
-      - name: Extract version from tag
-        id: version
-        run: echo "version=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+      - name: Generate changelog
+        id: changelog
+        run: |
+          # Get commits since last tag
+          LAST_TAG=$(git describe --tags --abbrev=0 HEAD^ 2>/dev/null || echo "")
+          if [ -n "$LAST_TAG" ]; then
+            echo "changelog<<CHANGELOG_EOF" >> "$GITHUB_OUTPUT"
+            git log "${LAST_TAG}..HEAD" --pretty=format:"- %s (%h)" --no-merges >> "$GITHUB_OUTPUT"
+            echo "" >> "$GITHUB_OUTPUT"
+            echo "CHANGELOG_EOF" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Create or update tag
+        if: ${{ !startsWith(github.ref, 'refs/tags/') }}
+        run: |
+          TAG="${{ needs.prepare.outputs.tag }}"
+          git tag -f "$TAG"
+          git push origin "$TAG" --force
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          name: OpenCoder v${{ steps.version.outputs.version }}
+          tag_name: ${{ needs.prepare.outputs.tag }}
+          name: OpenCoder v${{ needs.prepare.outputs.version }}
           generate_release_notes: true
           files: |
-            artifacts/opencoder-*
+            artifacts/opencoder-*.tar.gz
+            artifacts/opencoder-*.zip
             artifacts/checksums-sha256.txt
           body: |
+            ## What's Changed
+
+            ${{ steps.changelog.outputs.changelog }}
+
             ## Installation
 
             **macOS (Apple Silicon)**
             ```bash
-            curl -L https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/opencoder-macos-arm64.tar.gz | tar xz
+            curl -fsSL https://github.com/${{ github.repository }}/releases/download/${{ needs.prepare.outputs.tag }}/opencoder-${{ needs.prepare.outputs.version }}-macos-arm64.tar.gz | tar xz
             sudo mv opencoder /usr/local/bin/
             ```
 
             **macOS (Intel)**
             ```bash
-            curl -L https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/opencoder-macos-x64.tar.gz | tar xz
+            curl -fsSL https://github.com/${{ github.repository }}/releases/download/${{ needs.prepare.outputs.tag }}/opencoder-${{ needs.prepare.outputs.version }}-macos-x64.tar.gz | tar xz
             sudo mv opencoder /usr/local/bin/
             ```
 
             **Linux (x64)**
             ```bash
-            curl -L https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/opencoder-linux-x64.tar.gz | tar xz
+            curl -fsSL https://github.com/${{ github.repository }}/releases/download/${{ needs.prepare.outputs.tag }}/opencoder-${{ needs.prepare.outputs.version }}-linux-x64.tar.gz | tar xz
             sudo mv opencoder /usr/local/bin/
             ```
 
-            **Linux (x64, static musl)**
+            **Linux (x64, static/musl)**
             ```bash
-            curl -L https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/opencoder-linux-x64-musl.tar.gz | tar xz
+            curl -fsSL https://github.com/${{ github.repository }}/releases/download/${{ needs.prepare.outputs.tag }}/opencoder-${{ needs.prepare.outputs.version }}-linux-x64-musl.tar.gz | tar xz
             sudo mv opencoder /usr/local/bin/
             ```
+
+            **Linux (ARM64)**
+            ```bash
+            curl -fsSL https://github.com/${{ github.repository }}/releases/download/${{ needs.prepare.outputs.tag }}/opencoder-${{ needs.prepare.outputs.version }}-linux-arm64.tar.gz | tar xz
+            sudo mv opencoder /usr/local/bin/
+            ```
+
+            **Windows (x64)**
+            Download `opencoder-${{ needs.prepare.outputs.version }}-windows-x64.zip` and extract.
 
             **From source**
             ```bash
             cargo install --git https://github.com/${{ github.repository }} opencoder-cli
             ```
 
-            See checksums-sha256.txt to verify downloads.
+            Verify downloads with `checksums-sha256.txt`.
 
-  # Publish to crates.io (manual approval via environment protection rules)
-  publish:
+  # ─── Publish: push to crates.io ─────────────────────────────────────
+  publish-crates:
     name: Publish to crates.io
-    needs: release
+    needs: [prepare, release]
+    if: ${{ !inputs.dry_run }}
     runs-on: ubuntu-latest
     environment: crates-io
     steps:
@@ -194,25 +296,20 @@ jobs:
         env:
           CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
         run: |
+          set +e  # don't fail on already-published
           crates=(
-            core
-            patch
-            shell
-            pty
-            provider
-            file
-            lsp
-            mcp
-            snapshot
-            project
-            tool
-            session
-            agent
-            server
-            cli
+            core patch shell pty provider file lsp mcp
+            snapshot project tool session agent server cli
           )
           for crate in "${crates[@]}"; do
-            echo "Publishing opencoder-${crate}..."
-            cargo publish -p "opencoder-${crate}" --allow-dirty || true
-            sleep 15  # wait for crates.io index update
+            echo "::group::Publishing opencoder-${crate}"
+            cargo publish -p "opencoder-${crate}" 2>&1
+            status=$?
+            if [ $status -eq 0 ]; then
+              echo "✅ opencoder-${crate} published"
+            else
+              echo "⚠️  opencoder-${crate} skipped (already published or error)"
+            fi
+            echo "::endgroup::"
+            sleep 20  # crates.io index propagation
           done

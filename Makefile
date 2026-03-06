@@ -1,4 +1,4 @@
-.PHONY: build test lint clean install fmt check
+.PHONY: build test lint clean install fmt check release-patch release-minor release-major
 
 # Default target
 all: lint test build
@@ -45,3 +45,22 @@ serve:
 run:
 	@echo "Usage: make run PROMPT='your prompt here'"
 	@test -n "$(PROMPT)" && cargo run -p opencoder-cli -- run "$(PROMPT)" || true
+
+# Version bump and release (auto: commit + tag + push → triggers CI release)
+release-patch:
+	./scripts/version-bump.sh patch
+	@VERSION=$$(grep -m1 '^version' Cargo.toml | sed 's/.*"\(.*\)"/\1/'); \
+	git add -A && git commit -m "chore: release v$$VERSION" && \
+	git tag "v$$VERSION" && git push origin master --tags
+
+release-minor:
+	./scripts/version-bump.sh minor
+	@VERSION=$$(grep -m1 '^version' Cargo.toml | sed 's/.*"\(.*\)"/\1/'); \
+	git add -A && git commit -m "chore: release v$$VERSION" && \
+	git tag "v$$VERSION" && git push origin master --tags
+
+release-major:
+	./scripts/version-bump.sh major
+	@VERSION=$$(grep -m1 '^version' Cargo.toml | sed 's/.*"\(.*\)"/\1/'); \
+	git add -A && git commit -m "chore: release v$$VERSION" && \
+	git tag "v$$VERSION" && git push origin master --tags

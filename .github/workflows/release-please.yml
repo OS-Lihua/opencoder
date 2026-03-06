@@ -1,0 +1,36 @@
+name: Release Please
+
+on:
+  push:
+    branches: [master]
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  release-please:
+    name: Release Please
+    runs-on: ubuntu-latest
+    outputs:
+      release_created: ${{ steps.release.outputs.release_created }}
+      tag_name: ${{ steps.release.outputs.tag_name }}
+      version: ${{ steps.release.outputs.version }}
+    steps:
+      - uses: googleapis/release-please-action@v4
+        id: release
+        with:
+          release-type: rust
+          package-name: opencoder
+          # Bumps version in all workspace Cargo.toml files
+          extra-files: |
+            Cargo.toml
+
+  # When release-please merges a release PR (creates a tag),
+  # trigger the build + publish pipeline
+  trigger-release:
+    name: Trigger release build
+    needs: release-please
+    if: ${{ needs.release-please.outputs.release_created }}
+    uses: ./.github/workflows/release.yml
+    secrets: inherit

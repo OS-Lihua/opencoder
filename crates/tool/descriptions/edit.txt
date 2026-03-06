@@ -1,0 +1,1 @@
+Make targeted text replacements in files. Specify the exact text to find (old_string) and what to replace it with (new_string). The old_string must uniquely match a section of the file unless replace_all is true. Supports fuzzy matching with line-trimmed and whitespace-normalized fallback strategies.

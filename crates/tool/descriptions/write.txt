@@ -1,0 +1,1 @@
+Create or overwrite a file with the given content. Use this for creating new files or completely replacing file contents. The file_path must be an absolute path. Parent directories are created automatically. For partial modifications, prefer the edit tool.

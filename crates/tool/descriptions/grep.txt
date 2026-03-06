@@ -1,0 +1,1 @@
+Search file contents using regular expressions. Supports full regex syntax. Filter files with the include parameter (e.g. "*.rs"). Returns matching lines grouped by file with line numbers. Use this to find specific code patterns or text in the codebase.

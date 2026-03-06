@@ -1,0 +1,1 @@
+Fast file pattern matching tool. Supports glob patterns like "**/*.rs" or "src/**/*.ts". Returns matching file paths sorted by modification time (newest first). Use this when you need to find files by name patterns.

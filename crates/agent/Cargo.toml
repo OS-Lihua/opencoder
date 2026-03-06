@@ -1,0 +1,19 @@
+[package]
+name = "opencoder-agent"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+opencoder-core = { workspace = true }
+opencoder-provider = { workspace = true }
+opencoder-tool = { workspace = true }
+opencoder-session = { workspace = true }
+tokio = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+tracing = { workspace = true }
+thiserror = { workspace = true }
+anyhow = { workspace = true }
+tokio-util = { workspace = true }
+async-trait = "0.1"

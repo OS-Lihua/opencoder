@@ -1,0 +1,1 @@
+Generate a brief summary of the conversation including what was accomplished, key decisions made, and any pending work. Be concise but include specific file paths and technical details.

@@ -1,0 +1,24 @@
+[package]
+name = "opencoder-provider"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+opencoder-core = { workspace = true }
+tokio = { workspace = true }
+tokio-stream = { workspace = true }
+tokio-util = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+reqwest = { workspace = true }
+tracing = { workspace = true }
+thiserror = { workspace = true }
+anyhow = { workspace = true }
+regex = { workspace = true }
+chrono = { workspace = true }
+once_cell = { workspace = true }
+dirs = { workspace = true }
+async-trait = "0.1"
+futures = "0.3"
+bytes = "1"

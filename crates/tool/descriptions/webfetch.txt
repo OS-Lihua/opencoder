@@ -1,0 +1,1 @@
+Fetch the content of a web page or API endpoint. Returns the content in the specified format: "text" strips HTML tags, "markdown" converts HTML to Markdown, "html" returns raw HTML. Responses are truncated if they exceed the maximum size. Only HTTP and HTTPS URLs are supported.

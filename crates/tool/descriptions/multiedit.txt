@@ -1,0 +1,1 @@
+Make multiple text replacements across one or more files in a single operation. Each edit specifies a file_path, old_string, new_string, and optional replace_all flag. Edits are applied sequentially. This is more efficient than calling the edit tool multiple times when you need to make several related changes.

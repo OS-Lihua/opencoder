@@ -1,0 +1,1 @@
+Summarize the conversation so far into a concise summary that preserves all important context, decisions, code changes, and findings. The summary will replace the conversation history to free up context space. Include file paths, function names, and specific details that would be needed to continue the work.

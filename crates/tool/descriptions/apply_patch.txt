@@ -1,0 +1,1 @@
+Apply a patch to modify files. Accepts a patch in the "*** Begin Patch / *** End Patch" format with file add, update, and delete operations. Each file patch contains hunks with context lines, additions (+), and removals (-). Paths are relative to the project directory. This is the preferred tool for making multiple related changes to files at once.

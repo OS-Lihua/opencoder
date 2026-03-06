@@ -5,6 +5,9 @@ on:
     - cron: '0 0 * * *'  # UTC midnight
   workflow_dispatch:
 
+permissions:
+  contents: write
+
 env:
   CARGO_TERM_COLOR: always
   RUSTFLAGS: -D warnings
@@ -15,11 +18,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
-      - name: Install cargo-audit
-        run: cargo install cargo-audit
-      - name: Run audit
-        run: cargo audit
+      - uses: rustsec/audit-check@v2
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
 
   outdated:
     name: Dependency freshness
@@ -27,13 +28,14 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
       - name: Install cargo-outdated
-        run: cargo install cargo-outdated
-      - name: Check outdated
-        run: cargo outdated --exit-code 1 || true
+        run: cargo install cargo-outdated --locked
+      - name: Check outdated dependencies
+        run: cargo outdated --workspace --root-deps-only --exit-code 1 || true
 
   nightly-build:
-    name: Nightly build (${{ matrix.target }})
+    name: Nightly build (${{ matrix.suffix }})
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
@@ -42,6 +44,9 @@ jobs:
           - os: ubuntu-latest
             target: x86_64-unknown-linux-gnu
             suffix: linux-x64
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-musl
+            suffix: linux-x64-musl
           - os: macos-latest
             target: aarch64-apple-darwin
             suffix: macos-arm64
@@ -50,17 +55,63 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           targets: ${{ matrix.target }}
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: nightly-${{ matrix.target }}
+
+      - name: Install musl-tools
+        if: matrix.target == 'x86_64-unknown-linux-musl'
+        run: sudo apt-get update && sudo apt-get install -y musl-tools
+
+      - name: Run tests
+        if: matrix.target != 'x86_64-unknown-linux-musl'
+        run: cargo test --all-features --workspace
+
       - name: Build
         run: cargo build --release --target ${{ matrix.target }} --bin opencoder
+
       - name: Strip binary
         run: strip target/${{ matrix.target }}/release/opencoder 2>/dev/null || true
+
       - name: Package
         run: |
           mkdir -p dist
           tar -czf dist/opencoder-nightly-${{ matrix.suffix }}.tar.gz \
             -C target/${{ matrix.target }}/release opencoder
+
+      - name: Generate checksum
+        run: sha256sum dist/opencoder-nightly-${{ matrix.suffix }}.tar.gz > dist/opencoder-nightly-${{ matrix.suffix }}.sha256
+
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: opencoder-nightly-${{ matrix.suffix }}
-          path: dist/opencoder-nightly-${{ matrix.suffix }}.tar.gz
+          path: dist/opencoder-nightly-*
+          retention-days: 7
+
+  publish-nightly:
+    name: Publish nightly release
+    needs: nightly-build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          merge-multiple: true
+
+      - name: Update nightly release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: nightly
+          name: Nightly Build
+          prerelease: true
+          files: artifacts/opencoder-nightly-*
+          body: |
+            Automated nightly build from `master` branch.
+            Built at: ${{ github.event.head_commit.timestamp || 'scheduled' }}
+            Commit: ${{ github.sha }}
+
+            **These builds are not stable.** Use tagged releases for production.

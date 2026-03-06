@@ -47,7 +47,9 @@ impl Tool for ApplyPatchTool {
             // Security check: prevent path traversal
             let canonical = full_path.canonicalize().ok();
             if let Some(ref canon) = canonical {
-                let proj_canon = project_dir.canonicalize().unwrap_or_else(|_| project_dir.to_path_buf());
+                let proj_canon = project_dir
+                    .canonicalize()
+                    .unwrap_or_else(|_| project_dir.to_path_buf());
                 if !canon.starts_with(&proj_canon) {
                     return Err(anyhow::anyhow!("path traversal detected: {}", path));
                 }

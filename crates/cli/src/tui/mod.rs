@@ -12,10 +12,12 @@ use std::sync::Arc;
 
 use anyhow::Result;
 use crossterm::event::{self, Event, KeyEventKind};
-use crossterm::terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen};
 use crossterm::execute;
-use ratatui::prelude::*;
+use crossterm::terminal::{
+    EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode, enable_raw_mode,
+};
 use ratatui::Terminal;
+use ratatui::prelude::*;
 
 use opencoder_agent::AgentRegistry;
 use opencoder_core::bus::Bus;
@@ -28,6 +30,7 @@ use opencoder_tool::ToolRegistry;
 use app::{App, Screen};
 
 /// Run the TUI application.
+#[allow(clippy::too_many_arguments)]
 pub async fn run_tui(
     db: Arc<Database>,
     bus: Bus,
@@ -80,27 +83,25 @@ async fn run_loop(
 
     loop {
         // Draw
-        terminal.draw(|f| {
-            match app.screen {
-                Screen::Home => screens::home::render(f, app),
-                Screen::Session => screens::session::render(f, app),
-            }
+        terminal.draw(|f| match app.screen {
+            Screen::Home => screens::home::render(f, app),
+            Screen::Session => screens::session::render(f, app),
         })?;
 
         // Handle events with 50ms poll timeout
         let timeout = std::time::Duration::from_millis(50);
 
         // Check for terminal events
-        if crossterm::event::poll(timeout)? {
-            if let Event::Key(key) = event::read()? {
-                if key.kind != KeyEventKind::Press {
-                    continue;
-                }
+        if crossterm::event::poll(timeout)?
+            && let Event::Key(key) = event::read()?
+        {
+            if key.kind != KeyEventKind::Press {
+                continue;
+            }
 
-                let action = key::handle_key(key, &app.screen, &app.input_mode);
-                if app.handle_action(action).await? {
-                    break; // quit
-                }
+            let action = key::handle_key(key, &app.screen, &app.input_mode);
+            if app.handle_action(action).await? {
+                break; // quit
             }
         }
 

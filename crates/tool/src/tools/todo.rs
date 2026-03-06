@@ -65,9 +65,8 @@ impl Tool for TodoWriteTool {
     }
 
     async fn execute(&self, params: serde_json::Value, ctx: &ToolContext) -> Result<ToolOutput> {
-        let todos: Vec<TodoItem> = serde_json::from_value(
-            params["todos"].clone(),
-        ).map_err(|e| anyhow::anyhow!("invalid todos format: {e}"))?;
+        let todos: Vec<TodoItem> = serde_json::from_value(params["todos"].clone())
+            .map_err(|e| anyhow::anyhow!("invalid todos format: {e}"))?;
 
         // Store todos in the database if available
         if let Some(db) = &ctx.db {
@@ -103,8 +102,9 @@ impl Tool for TodoWriteTool {
 
             // Publish event if bus available
             if let Some(bus) = &ctx.bus {
-                let session_id = ctx.session_id.parse()
-                    .unwrap_or_else(|_| opencoder_core::id::Identifier::create(opencoder_core::id::Prefix::Session));
+                let session_id = ctx.session_id.parse().unwrap_or_else(|_| {
+                    opencoder_core::id::Identifier::create(opencoder_core::id::Prefix::Session)
+                });
                 bus.publish(opencoder_core::bus::Event::TodoUpdated { session_id });
             }
         }
@@ -112,15 +112,23 @@ impl Tool for TodoWriteTool {
         let pending = todos.iter().filter(|t| t.status != "completed").count();
         let completed = todos.iter().filter(|t| t.status == "completed").count();
 
-        let summary: Vec<String> = todos.iter().enumerate().map(|(i, t)| {
-            let icon = match t.status.as_str() {
-                "completed" => "[x]",
-                "in_progress" => "[~]",
-                _ => "[ ]",
-            };
-            let priority_str = t.priority.as_deref().map(|p| format!(" ({p})")).unwrap_or_default();
-            format!("{}. {} {}{}", i + 1, icon, t.content, priority_str)
-        }).collect();
+        let summary: Vec<String> = todos
+            .iter()
+            .enumerate()
+            .map(|(i, t)| {
+                let icon = match t.status.as_str() {
+                    "completed" => "[x]",
+                    "in_progress" => "[~]",
+                    _ => "[ ]",
+                };
+                let priority_str = t
+                    .priority
+                    .as_deref()
+                    .map(|p| format!(" ({p})"))
+                    .unwrap_or_default();
+                format!("{}. {} {}{}", i + 1, icon, t.content, priority_str)
+            })
+            .collect();
 
         Ok(ToolOutput {
             title: format!("Todos ({pending} pending, {completed} done)"),
@@ -190,15 +198,23 @@ impl Tool for TodoReadTool {
                 });
             }
 
-            let output: Vec<String> = todos.iter().enumerate().map(|(i, t)| {
-                let icon = match t.status.as_str() {
-                    "completed" => "[x]",
-                    "in_progress" => "[~]",
-                    _ => "[ ]",
-                };
-                let priority_str = t.priority.as_deref().map(|p| format!(" ({p})")).unwrap_or_default();
-                format!("{}. {} {}{}", i + 1, icon, t.content, priority_str)
-            }).collect();
+            let output: Vec<String> = todos
+                .iter()
+                .enumerate()
+                .map(|(i, t)| {
+                    let icon = match t.status.as_str() {
+                        "completed" => "[x]",
+                        "in_progress" => "[~]",
+                        _ => "[ ]",
+                    };
+                    let priority_str = t
+                        .priority
+                        .as_deref()
+                        .map(|p| format!(" ({p})"))
+                        .unwrap_or_default();
+                    format!("{}. {} {}{}", i + 1, icon, t.content, priority_str)
+                })
+                .collect();
 
             return Ok(ToolOutput {
                 title: format!("Todos ({} items)", todos.len()),

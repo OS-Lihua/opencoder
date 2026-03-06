@@ -71,7 +71,11 @@ impl ChatMessage {
     }
 
     /// Create a tool result message.
-    pub fn tool_result(tool_use_id: impl Into<String>, content: impl Into<String>, is_error: bool) -> Self {
+    pub fn tool_result(
+        tool_use_id: impl Into<String>,
+        content: impl Into<String>,
+        is_error: bool,
+    ) -> Self {
         Self {
             role: Role::Tool,
             content: vec![ContentPart::ToolResult {
@@ -151,9 +155,7 @@ pub enum StreamEvent {
         arguments_delta: String,
     },
     /// The end of a tool call.
-    ToolCallEnd {
-        index: usize,
-    },
+    ToolCallEnd { index: usize },
     /// A generation step finished, with usage info.
     StepFinish {
         finish_reason: FinishReason,

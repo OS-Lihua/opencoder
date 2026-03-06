@@ -4,14 +4,14 @@ use ratatui::prelude::*;
 use ratatui::widgets::*;
 
 use crate::tui::app::App;
-use crate::tui::theme;
 use crate::tui::components::message_list;
+use crate::tui::theme;
 
 pub fn render(f: &mut Frame, app: &App) {
     let chunks = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
-            Constraint::Length(1),  // title bar
+            Constraint::Length(1), // title bar
             Constraint::Min(5),    // messages
             Constraint::Length(5), // input
             Constraint::Length(1), // status
@@ -24,8 +24,7 @@ pub fn render(f: &mut Frame, app: &App) {
         .as_ref()
         .map(|s| s.title.as_str())
         .unwrap_or("Session");
-    let title = Paragraph::new(format!(" {} ", session_title))
-        .style(theme::title_style());
+    let title = Paragraph::new(format!(" {} ", session_title)).style(theme::title_style());
     f.render_widget(title, chunks[0]);
 
     // Messages area
@@ -40,18 +39,20 @@ pub fn render(f: &mut Frame, app: &App) {
         (total_lines.saturating_sub(visible_height)).saturating_sub(app.scroll_offset as u16)
     };
 
-    let messages_widget = Paragraph::new(message_lines)
-        .scroll((scroll, 0))
-        .block(
-            Block::default()
-                .borders(Borders::ALL)
-                .style(theme::border_style()),
-        );
+    let messages_widget = Paragraph::new(message_lines).scroll((scroll, 0)).block(
+        Block::default()
+            .borders(Borders::ALL)
+            .style(theme::border_style()),
+    );
     f.render_widget(messages_widget, chunks[1]);
 
     // Input area
     let input_block = Block::default()
-        .title(if app.agent_running { " Thinking... " } else { " Input (Enter=send, Esc=back) " })
+        .title(if app.agent_running {
+            " Thinking... "
+        } else {
+            " Input (Enter=send, Esc=back) "
+        })
         .borders(Borders::ALL)
         .style(if app.agent_running {
             theme::tool_running_style()

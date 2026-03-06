@@ -8,9 +8,7 @@ use std::path::PathBuf;
 use std::sync::LazyLock;
 use tokio::sync::broadcast;
 
-use crate::id::{
-    MessageId, PartId, PermissionId, ProjectId, QuestionId, SessionId,
-};
+use crate::id::{MessageId, PartId, PermissionId, ProjectId, QuestionId, SessionId};
 
 /// All possible bus events in the system.
 #[derive(Debug, Clone, Serialize, Deserialize)]

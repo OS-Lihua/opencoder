@@ -20,11 +20,7 @@ const INSTRUCTION_FILES: &[&str] = &[
 ///
 /// Returns a Vec of system prompt strings that get concatenated into the
 /// system message(s) sent to the LLM.
-pub fn build(
-    agent_system_prompt: &str,
-    project_dir: &Path,
-    config: &Config,
-) -> Vec<String> {
+pub fn build(agent_system_prompt: &str, project_dir: &Path, config: &Config) -> Vec<String> {
     let mut parts = Vec::new();
 
     // 1. Base agent system prompt
@@ -40,21 +36,20 @@ pub fn build(
 
     // 4. Custom agent prompts from .opencode/agents/
     let agents_dir = project_dir.join(".opencode").join("agents");
-    if agents_dir.is_dir() {
-        if let Ok(entries) = std::fs::read_dir(&agents_dir) {
-            for entry in entries.flatten() {
-                let path = entry.path();
-                if path.extension().is_some_and(|ext| ext == "md") {
-                    if let Ok(content) = std::fs::read_to_string(&path) {
-                        if !content.trim().is_empty() {
-                            parts.push(format!(
-                                "<custom-agent-prompt source=\"{}\">\n{}\n</custom-agent-prompt>",
-                                path.display(),
-                                content.trim()
-                            ));
-                        }
-                    }
-                }
+    if agents_dir.is_dir()
+        && let Ok(entries) = std::fs::read_dir(&agents_dir)
+    {
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if path.extension().is_some_and(|ext| ext == "md")
+                && let Ok(content) = std::fs::read_to_string(&path)
+                && !content.trim().is_empty()
+            {
+                parts.push(format!(
+                    "<custom-agent-prompt source=\"{}\">\n{}\n</custom-agent-prompt>",
+                    path.display(),
+                    content.trim()
+                ));
             }
         }
     }
@@ -89,12 +84,11 @@ fn build_env_block(project_dir: &Path) -> String {
         .args(["branch", "--show-current"])
         .current_dir(project_dir)
         .output()
+        && output.status.success()
     {
-        if output.status.success() {
-            let branch = String::from_utf8_lossy(&output.stdout).trim().to_string();
-            if !branch.is_empty() {
-                env_parts.push(format!("git branch: {branch}"));
-            }
+        let branch = String::from_utf8_lossy(&output.stdout).trim().to_string();
+        if !branch.is_empty() {
+            env_parts.push(format!("git branch: {branch}"));
         }
     }
 
@@ -115,15 +109,15 @@ fn find_instruction_files(project_dir: &Path) -> Vec<String> {
                 if seen.contains(&canonical) {
                     continue;
                 }
-                if let Ok(content) = std::fs::read_to_string(&path) {
-                    if !content.trim().is_empty() {
-                        results.push(format!(
-                            "<instructions source=\"{}\">\n{}\n</instructions>",
-                            path.display(),
-                            content.trim()
-                        ));
-                        seen.insert(canonical);
-                    }
+                if let Ok(content) = std::fs::read_to_string(&path)
+                    && !content.trim().is_empty()
+                {
+                    results.push(format!(
+                        "<instructions source=\"{}\">\n{}\n</instructions>",
+                        path.display(),
+                        content.trim()
+                    ));
+                    seen.insert(canonical);
                 }
             }
         }

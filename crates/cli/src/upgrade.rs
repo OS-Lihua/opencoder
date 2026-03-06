@@ -2,9 +2,11 @@
 
 use anyhow::Result;
 
+#[allow(dead_code)]
 const CURRENT_VERSION: &str = env!("CARGO_PKG_VERSION");
 
 /// Check if a newer version is available.
+#[allow(dead_code)]
 pub async fn check_version() -> Result<Option<String>> {
     let client = reqwest::Client::builder()
         .timeout(std::time::Duration::from_secs(10))
@@ -38,19 +40,17 @@ pub async fn check_version() -> Result<Option<String>> {
 }
 
 /// Print an update notification if a newer version exists.
+#[allow(dead_code)]
 pub async fn notify_if_available() {
     // Don't check in CI environments
     if std::env::var("CI").is_ok() || std::env::var("GITHUB_ACTIONS").is_ok() {
         return;
     }
 
-    match check_version().await {
-        Ok(Some(version)) => {
-            eprintln!(
-                "\x1b[33mA new version of opencoder is available: v{version} (current: v{CURRENT_VERSION})\x1b[0m"
-            );
-            eprintln!("\x1b[33mUpdate with: cargo install opencoder-cli\x1b[0m");
-        }
-        _ => {}
+    if let Ok(Some(version)) = check_version().await {
+        eprintln!(
+            "\x1b[33mA new version of opencoder is available: v{version} (current: v{CURRENT_VERSION})\x1b[0m"
+        );
+        eprintln!("\x1b[33mUpdate with: cargo install opencoder-cli\x1b[0m");
     }
 }

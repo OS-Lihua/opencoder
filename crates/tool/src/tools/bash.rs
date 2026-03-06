@@ -127,9 +127,8 @@ impl Tool for BashTool {
                     .unwrap_or_else(|| "signal".to_string());
 
                 if exit_code.unwrap_or(-1) != 0 {
-                    let meta = format!(
-                        "\n<bash_metadata>\nexit_code: {exit_str}\n</bash_metadata>"
-                    );
+                    let meta =
+                        format!("\n<bash_metadata>\nexit_code: {exit_str}\n</bash_metadata>");
                     Ok(ToolOutput {
                         title: description.to_string(),
                         output: format!("{}{meta}", truncated.content),

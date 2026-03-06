@@ -86,9 +86,8 @@ impl StreamProcessor {
                     text_content.push_str(&delta);
 
                     if let Some(ref pid) = text_part_id {
-                        self.session_svc.publish_part_delta(
-                            session_id, message_id, pid, "content", &delta,
-                        );
+                        self.session_svc
+                            .publish_part_delta(session_id, message_id, pid, "content", &delta);
                     } else {
                         let part = Part::Text(TextPart {
                             content: text_content.clone(),
@@ -102,9 +101,8 @@ impl StreamProcessor {
                     reasoning_content.push_str(&delta);
 
                     if let Some(ref pid) = reasoning_part_id {
-                        self.session_svc.publish_part_delta(
-                            session_id, message_id, pid, "content", &delta,
-                        );
+                        self.session_svc
+                            .publish_part_delta(session_id, message_id, pid, "content", &delta);
                     } else {
                         let part = Part::Reasoning(ReasoningPart {
                             content: reasoning_content.clone(),
@@ -128,7 +126,10 @@ impl StreamProcessor {
                     );
                 }
 
-                StreamEvent::ToolCallDelta { index, arguments_delta } => {
+                StreamEvent::ToolCallDelta {
+                    index,
+                    arguments_delta,
+                } => {
                     if let Some(tc) = pending_tools.get_mut(&index) {
                         tc.arguments_json.push_str(&arguments_delta);
 
@@ -159,10 +160,7 @@ impl StreamProcessor {
                             let part = Part::Tool(ToolPart {
                                 call_id: tc.call_id.clone(),
                                 tool: tc.name.clone(),
-                                state: ToolState::Pending {
-                                    input,
-                                    raw: None,
-                                },
+                                state: ToolState::Pending { input, raw: None },
                             });
                             self.session_svc.update_part(pid, &part)?;
                         }
@@ -289,7 +287,11 @@ impl StreamProcessor {
 
             // Update part to completed/error state
             let (output_text, is_error) = match tool_result {
-                Ok(ToolOutput { title, output, metadata }) => {
+                Ok(ToolOutput {
+                    title,
+                    output,
+                    metadata,
+                }) => {
                     if let Some(ref pid) = info.part_id {
                         let part = Part::Tool(ToolPart {
                             call_id: info.call_id.clone(),

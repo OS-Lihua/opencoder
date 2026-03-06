@@ -3,7 +3,6 @@
 //! Mirrors `src/flag/flag.ts` from the original OpenCode.
 //! All flags are read from `OPENCODE_*` environment variables at runtime.
 
-
 /// Read a boolean flag from environment. Truthy: "1", "true", "yes".
 pub fn get_bool(key: &str) -> bool {
     std::env::var(key)

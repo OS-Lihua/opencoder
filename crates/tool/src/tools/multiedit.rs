@@ -64,9 +64,8 @@ impl Tool for MultiEditTool {
     }
 
     async fn execute(&self, params: serde_json::Value, ctx: &ToolContext) -> Result<ToolOutput> {
-        let edits: Vec<EditItem> = serde_json::from_value(
-            params["edits"].clone(),
-        ).map_err(|e| anyhow::anyhow!("invalid edits format: {e}"))?;
+        let edits: Vec<EditItem> = serde_json::from_value(params["edits"].clone())
+            .map_err(|e| anyhow::anyhow!("invalid edits format: {e}"))?;
 
         if edits.is_empty() {
             return Ok(ToolOutput {

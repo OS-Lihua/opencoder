@@ -130,7 +130,11 @@ mod tests {
 
     #[test]
     fn serialize_request() {
-        let req = JsonRpcRequest::new(1, "initialize", Some(serde_json::json!({"protocolVersion": "2024-11-05"})));
+        let req = JsonRpcRequest::new(
+            1,
+            "initialize",
+            Some(serde_json::json!({"protocolVersion": "2024-11-05"})),
+        );
         let json = serde_json::to_string(&req).unwrap();
         assert!(json.contains("\"jsonrpc\":\"2.0\""));
         assert!(json.contains("\"method\":\"initialize\""));
@@ -147,7 +151,8 @@ mod tests {
 
     #[test]
     fn deserialize_error_response() {
-        let json = r#"{"jsonrpc":"2.0","id":1,"error":{"code":-32601,"message":"Method not found"}}"#;
+        let json =
+            r#"{"jsonrpc":"2.0","id":1,"error":{"code":-32601,"message":"Method not found"}}"#;
         let resp: JsonRpcResponse = serde_json::from_str(json).unwrap();
         assert!(resp.error.is_some());
         assert_eq!(resp.error.unwrap().code, -32601);

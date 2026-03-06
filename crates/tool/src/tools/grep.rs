@@ -75,18 +75,19 @@ impl Tool for GrepTool {
     }
 }
 
-async fn try_ripgrep(
-    pattern: &str,
-    dir: &PathBuf,
-    include: Option<&str>,
-) -> Option<ToolOutput> {
+async fn try_ripgrep(pattern: &str, dir: &PathBuf, include: Option<&str>) -> Option<ToolOutput> {
     let mut cmd = Command::new("rg");
-    cmd.args(["-nH", "--hidden", "--no-messages", "--field-match-separator=|"])
-        .arg(pattern)
-        .arg(dir)
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .kill_on_drop(true);
+    cmd.args([
+        "-nH",
+        "--hidden",
+        "--no-messages",
+        "--field-match-separator=|",
+    ])
+    .arg(pattern)
+    .arg(dir)
+    .stdout(Stdio::piped())
+    .stderr(Stdio::piped())
+    .kill_on_drop(true);
 
     if let Some(glob) = include {
         cmd.args(["--glob", glob]);

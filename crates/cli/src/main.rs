@@ -9,8 +9,8 @@ use std::sync::Arc;
 use clap::{Parser, Subcommand};
 use tracing_subscriber::EnvFilter;
 
-use opencoder_agent::agent_loop::{self, AgentLoopConfig};
 use opencoder_agent::AgentRegistry;
+use opencoder_agent::agent_loop::{self, AgentLoopConfig};
 use opencoder_core::bus::Bus;
 use opencoder_core::config::Config;
 use opencoder_core::global;
@@ -97,40 +97,56 @@ async fn main() {
         Some(Commands::Serve { port }) => {
             // Build provider and registries for server
             let model_str = config.model.as_deref().unwrap_or(DEFAULT_MODEL);
-            let (provider, _model_id) = match provider_init::build_provider_with_config(model_str, &config) {
-                Ok(p) => p,
-                Err(e) => {
-                    eprintln!("error initializing provider: {e}");
-                    eprintln!("hint: set ANTHROPIC_API_KEY or OPENAI_API_KEY environment variable");
-                    process::exit(1);
-                }
-            };
+            let (provider, _model_id) =
+                match provider_init::build_provider_with_config(model_str, &config) {
+                    Ok(p) => p,
+                    Err(e) => {
+                        eprintln!("error initializing provider: {e}");
+                        eprintln!(
+                            "hint: set ANTHROPIC_API_KEY or OPENAI_API_KEY environment variable"
+                        );
+                        process::exit(1);
+                    }
+                };
 
             let agent_registry = Arc::new(AgentRegistry::new());
             let tool_registry = Arc::new(ToolRegistry::with_builtins());
 
             let state = opencoder_server::AppState::new(
-                db, bus, config, dir, provider, agent_registry, tool_registry,
+                db,
+                bus,
+                config,
+                dir,
+                provider,
+                agent_registry,
+                tool_registry,
             );
             if let Err(e) = opencoder_server::serve(state, port).await {
                 eprintln!("server error: {e}");
                 process::exit(1);
             }
         }
-        Some(Commands::Run { prompt, agent, model }) => {
+        Some(Commands::Run {
+            prompt,
+            agent,
+            model,
+        }) => {
             let model_str = model
                 .as_deref()
                 .or(config.model.as_deref())
                 .unwrap_or(DEFAULT_MODEL);
 
-            let (provider, model_id) = match provider_init::build_provider_with_config(model_str, &config) {
-                Ok(p) => p,
-                Err(e) => {
-                    eprintln!("error: {e}");
-                    eprintln!("hint: set ANTHROPIC_API_KEY or OPENAI_API_KEY environment variable");
-                    process::exit(1);
-                }
-            };
+            let (provider, model_id) =
+                match provider_init::build_provider_with_config(model_str, &config) {
+                    Ok(p) => p,
+                    Err(e) => {
+                        eprintln!("error: {e}");
+                        eprintln!(
+                            "hint: set ANTHROPIC_API_KEY or OPENAI_API_KEY environment variable"
+                        );
+                        process::exit(1);
+                    }
+                };
 
             let project_svc = ProjectService::new(db.clone());
             let session_svc = Arc::new(SessionService::new(db.clone(), bus.clone()));
@@ -155,7 +171,10 @@ async fn main() {
                 }
             };
 
-            eprintln!("\x1b[2m[model: {model_str} | agent: {agent} | session: {}]\x1b[0m", session.id);
+            eprintln!(
+                "\x1b[2m[model: {model_str} | agent: {agent} | session: {}]\x1b[0m",
+                session.id
+            );
 
             let cancel = tokio_util::sync::CancellationToken::new();
 
@@ -193,7 +212,9 @@ async fn main() {
                 &registry,
                 tools.all().clone(),
                 &bus,
-            ).await {
+            )
+            .await
+            {
                 eprintln!("\n\x1b[31mAgent error: {e}\x1b[0m");
                 process::exit(1);
             }
@@ -202,7 +223,10 @@ async fn main() {
             output_handle.await.ok();
         }
         Some(Commands::Models) => {
-            println!("Configured model: {}", config.model.as_deref().unwrap_or("(default)"));
+            println!(
+                "Configured model: {}",
+                config.model.as_deref().unwrap_or("(default)")
+            );
             if let Some(small) = config.small_model.as_deref() {
                 println!("Small model: {small}");
             }
@@ -228,24 +252,22 @@ async fn main() {
             let project_svc = ProjectService::new(db.clone());
             let session_svc = SessionService::new(db.clone(), bus);
             match project_svc.get_by_worktree(&dir.to_string_lossy()) {
-                Ok(project) => {
-                    match session_svc.list(&project.id) {
-                        Ok(sessions) => {
-                            if sessions.is_empty() {
-                                println!("No sessions found.");
-                            } else {
-                                println!("{:<30} {:<40} {}", "ID", "TITLE", "CREATED");
-                                for s in sessions {
-                                    let ts = chrono::DateTime::from_timestamp_millis(s.time_created)
-                                        .map(|dt| dt.format("%Y-%m-%d %H:%M").to_string())
-                                        .unwrap_or_default();
-                                    println!("{:<30} {:<40} {}", s.id, s.title, ts);
-                                }
+                Ok(project) => match session_svc.list(&project.id) {
+                    Ok(sessions) => {
+                        if sessions.is_empty() {
+                            println!("No sessions found.");
+                        } else {
+                            println!("{:<30} {:<40} CREATED", "ID", "TITLE");
+                            for s in sessions {
+                                let ts = chrono::DateTime::from_timestamp_millis(s.time_created)
+                                    .map(|dt| dt.format("%Y-%m-%d %H:%M").to_string())
+                                    .unwrap_or_default();
+                                println!("{:<30} {:<40} {}", s.id, s.title, ts);
                             }
                         }
-                        Err(e) => eprintln!("error listing sessions: {e}"),
                     }
-                }
+                    Err(e) => eprintln!("error listing sessions: {e}"),
+                },
                 Err(_) => println!("No project found for {}", dir.display()),
             }
         }
@@ -270,25 +292,36 @@ async fn main() {
         None => {
             // Default: launch TUI
             let model_str = config.model.as_deref().unwrap_or(DEFAULT_MODEL);
-            let (provider, _model_id) = match provider_init::build_provider_with_config(model_str, &config) {
-                Ok(p) => p,
-                Err(e) => {
-                    eprintln!("error initializing provider: {e}");
-                    eprintln!("hint: set ANTHROPIC_API_KEY or OPENAI_API_KEY environment variable");
-                    eprintln!();
-                    eprintln!("Or use `opencoder run <prompt>` for non-interactive mode.");
-                    process::exit(1);
-                }
-            };
+            let (provider, _model_id) =
+                match provider_init::build_provider_with_config(model_str, &config) {
+                    Ok(p) => p,
+                    Err(e) => {
+                        eprintln!("error initializing provider: {e}");
+                        eprintln!(
+                            "hint: set ANTHROPIC_API_KEY or OPENAI_API_KEY environment variable"
+                        );
+                        eprintln!();
+                        eprintln!("Or use `opencoder run <prompt>` for non-interactive mode.");
+                        process::exit(1);
+                    }
+                };
 
             let session_svc = Arc::new(SessionService::new(db.clone(), bus.clone()));
             let agent_registry = Arc::new(AgentRegistry::new());
             let tool_registry = Arc::new(ToolRegistry::with_builtins());
 
             if let Err(e) = tui::run_tui(
-                db, bus, config, dir,
-                provider, tool_registry, agent_registry, session_svc,
-            ).await {
+                db,
+                bus,
+                config,
+                dir,
+                provider,
+                tool_registry,
+                agent_registry,
+                session_svc,
+            )
+            .await
+            {
                 eprintln!("TUI error: {e}");
                 process::exit(1);
             }

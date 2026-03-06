@@ -56,7 +56,9 @@ impl Tool for QuestionTool {
             use opencoder_core::id::{Identifier, Prefix};
 
             let question_id = Identifier::create(Prefix::Question);
-            let session_id = ctx.session_id.parse()
+            let session_id = ctx
+                .session_id
+                .parse()
                 .unwrap_or_else(|_| Identifier::create(Prefix::Session));
 
             bus.publish(Event::QuestionAsked {

@@ -3,7 +3,6 @@
 //! Mirrors `src/permission/next.ts` from the original OpenCode.
 //! Uses last-match-wins semantics with wildcard pattern matching.
 
-
 use opencoder_core::util::wildcard;
 
 use crate::agent::PermissionRule;

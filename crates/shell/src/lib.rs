@@ -9,7 +9,13 @@ use std::path::PathBuf;
 pub fn preferred() -> PathBuf {
     #[cfg(unix)]
     {
-        for shell in &["/bin/zsh", "/usr/bin/zsh", "/bin/bash", "/usr/bin/bash", "/bin/sh"] {
+        for shell in &[
+            "/bin/zsh",
+            "/usr/bin/zsh",
+            "/bin/bash",
+            "/usr/bin/bash",
+            "/bin/sh",
+        ] {
             if std::path::Path::new(shell).exists() {
                 return PathBuf::from(shell);
             }
@@ -35,7 +41,13 @@ pub fn acceptable() -> Vec<PathBuf> {
 
     #[cfg(unix)]
     {
-        for shell in &["/bin/zsh", "/usr/bin/zsh", "/bin/bash", "/usr/bin/bash", "/bin/sh"] {
+        for shell in &[
+            "/bin/zsh",
+            "/usr/bin/zsh",
+            "/bin/bash",
+            "/usr/bin/bash",
+            "/bin/sh",
+        ] {
             if std::path::Path::new(shell).exists() {
                 shells.push(PathBuf::from(shell));
             }
@@ -55,9 +67,7 @@ pub fn acceptable() -> Vec<PathBuf> {
 
 /// Get the shell name (e.g., "zsh", "bash") from a path.
 pub fn shell_name(path: &std::path::Path) -> &str {
-    path.file_name()
-        .and_then(|n| n.to_str())
-        .unwrap_or("sh")
+    path.file_name().and_then(|n| n.to_str()).unwrap_or("sh")
 }
 
 /// Kill a process tree. Sends SIGTERM, then SIGKILL after a short delay.

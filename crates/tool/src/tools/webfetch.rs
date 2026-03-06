@@ -100,7 +100,11 @@ impl Tool for WebFetchTool {
         if bytes.len() > MAX_RESPONSE_BYTES {
             return Ok(ToolOutput {
                 title: "WebFetch".to_string(),
-                output: format!("Response too large: {} bytes (max {})", bytes.len(), MAX_RESPONSE_BYTES),
+                output: format!(
+                    "Response too large: {} bytes (max {})",
+                    bytes.len(),
+                    MAX_RESPONSE_BYTES
+                ),
                 metadata: serde_json::json!({ "error": "too_large", "size": bytes.len() }),
             });
         }

@@ -211,7 +211,9 @@ impl SessionService {
             let sid2 = sid.clone();
             self.db.effect(move || {
                 bus.publish(Event::SessionDeleted {
-                    id: sid2.parse().unwrap_or_else(|_| Identifier::create(Prefix::Session)),
+                    id: sid2
+                        .parse()
+                        .unwrap_or_else(|_| Identifier::create(Prefix::Session)),
                 });
             });
             Ok(())
@@ -284,9 +286,15 @@ impl SessionService {
         let data = serde_json::to_string(part)?;
 
         let bus = self.bus.clone();
-        let sid = session_id.parse().unwrap_or_else(|_| Identifier::create(Prefix::Session));
-        let mid = message_id.parse().unwrap_or_else(|_| Identifier::create(Prefix::Message));
-        let pid = id.parse().unwrap_or_else(|_| Identifier::create(Prefix::Part));
+        let sid = session_id
+            .parse()
+            .unwrap_or_else(|_| Identifier::create(Prefix::Session));
+        let mid = message_id
+            .parse()
+            .unwrap_or_else(|_| Identifier::create(Prefix::Message));
+        let pid = id
+            .parse()
+            .unwrap_or_else(|_| Identifier::create(Prefix::Part));
 
         self.db.use_conn(|conn| {
             conn.execute(
@@ -332,9 +340,15 @@ impl SessionService {
         delta: &str,
     ) {
         self.bus.publish(Event::PartDelta {
-            session_id: session_id.parse().unwrap_or_else(|_| Identifier::create(Prefix::Session)),
-            message_id: message_id.parse().unwrap_or_else(|_| Identifier::create(Prefix::Message)),
-            part_id: part_id.parse().unwrap_or_else(|_| Identifier::create(Prefix::Part)),
+            session_id: session_id
+                .parse()
+                .unwrap_or_else(|_| Identifier::create(Prefix::Session)),
+            message_id: message_id
+                .parse()
+                .unwrap_or_else(|_| Identifier::create(Prefix::Message)),
+            part_id: part_id
+                .parse()
+                .unwrap_or_else(|_| Identifier::create(Prefix::Part)),
             field: field.to_string(),
             delta: delta.to_string(),
         });
@@ -472,7 +486,9 @@ impl SessionService {
 
     fn publish_session_updated(&self, session_id: &str, title: &str) {
         self.bus.publish(Event::SessionUpdated(SessionEvent {
-            id: session_id.parse().unwrap_or_else(|_| Identifier::create(Prefix::Session)),
+            id: session_id
+                .parse()
+                .unwrap_or_else(|_| Identifier::create(Prefix::Session)),
             title: title.to_string(),
         }));
     }
@@ -629,8 +645,11 @@ mod tests {
         svc.add_part(
             &session.id,
             &msg_id,
-            &Part::Text(TextPart { content: "world".into() }),
-        ).unwrap();
+            &Part::Text(TextPart {
+                content: "world".into(),
+            }),
+        )
+        .unwrap();
 
         let forked = svc.fork(&session.id, "prj_test", "/tmp").unwrap();
         let forked_msgs = svc.messages(&forked.id).unwrap();

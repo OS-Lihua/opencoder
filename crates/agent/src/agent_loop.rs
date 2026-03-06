@@ -7,20 +7,20 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 use anyhow::Result;
-use tracing::{debug, info, warn};
 use tokio_util::sync::CancellationToken;
+use tracing::{debug, info, warn};
 
 use opencoder_core::bus::{Bus, Event, SessionStatusInfo};
+use opencoder_core::config::Config;
 use opencoder_core::id::{Identifier, Prefix};
+use opencoder_provider::models_db::ModelsDb;
 use opencoder_provider::provider::{
     ChatMessage, ChatRequest, ContentPart, FinishReason, LlmProvider, Role, ToolDefinition,
 };
-use opencoder_provider::models_db::ModelsDb;
-use opencoder_core::config::Config;
+use opencoder_session::compaction;
 use opencoder_session::message::{AssistantMessage, Message, Part, UserMessage};
 use opencoder_session::processor::{StreamProcessor, ToolResultInfo};
 use opencoder_session::session::SessionService;
-use opencoder_session::compaction;
 use opencoder_tool::tool::Tool;
 
 use opencoder_tool::tool::AgentRunner;
@@ -64,11 +64,9 @@ impl AgentRunner for SubAgentRunner {
         let project_dir_str = self.project_dir.to_string_lossy().to_string();
         let parent_session = self.session_svc.get(parent_session_id)?;
 
-        let child_session = self.session_svc.create(
-            &parent_session.project_id,
-            &project_dir_str,
-            None,
-        )?;
+        let child_session =
+            self.session_svc
+                .create(&parent_session.project_id, &project_dir_str, None)?;
 
         let loop_config = AgentLoopConfig {
             session_id: child_session.id.clone(),
@@ -88,7 +86,8 @@ impl AgentRunner for SubAgentRunner {
             &self.registry,
             self.tools.clone(),
             &self.bus,
-        ).await?;
+        )
+        .await?;
 
         // Collect the final text output from the child session
         let messages = self.session_svc.messages(&child_session.id)?;
@@ -96,11 +95,11 @@ impl AgentRunner for SubAgentRunner {
         for msg in messages.iter().rev() {
             if let Message::Assistant(_) = &msg.message {
                 for part in &msg.parts {
-                    if let Part::Text(text) = &part.part {
-                        if !text.content.is_empty() {
-                            output = text.content.clone();
-                            break;
-                        }
+                    if let Part::Text(text) = &part.part
+                        && !text.content.is_empty()
+                    {
+                        output = text.content.clone();
+                        break;
                     }
                 }
                 if !output.is_empty() {
@@ -192,8 +191,8 @@ pub async fn run(
 
         // Build tool definitions
         let tool_defs: Vec<ToolDefinition> = available_tools
-            .iter()
-            .map(|(_, tool)| ToolDefinition {
+            .values()
+            .map(|tool| ToolDefinition {
                 name: tool.id().to_string(),
                 description: tool.description().to_string(),
                 parameters: tool.parameters_schema(),
@@ -207,7 +206,10 @@ pub async fn run(
         request.top_p = agent_def.top_p;
 
         // Stream LLM response
-        let stream = config.provider.stream(request, config.cancel.clone()).await?;
+        let stream = config
+            .provider
+            .stream(request, config.cancel.clone())
+            .await?;
 
         let processor = StreamProcessor::new(session_svc.clone(), available_tools.clone());
         let result = processor
@@ -236,9 +238,7 @@ pub async fn run(
             add_tool_result_messages(&session_svc, &config.session_id, &tool_results)?;
 
             // Check for context overflow and run compaction if needed
-            maybe_compact(
-                &config, &session_svc, &result.usage.input_tokens,
-            ).await;
+            maybe_compact(&config, &session_svc, &result.usage.input_tokens).await;
 
             // Check finish reason — if tool_use, continue the loop
             if result.finish_reason == FinishReason::ToolUse {
@@ -286,11 +286,8 @@ fn build_llm_messages(
     let mut llm_messages = Vec::new();
 
     // Build system prompt with environment info, instruction files, etc.
-    let system_parts = opencoder_session::system_prompt::build(
-        &agent_def.system_prompt,
-        project_dir,
-        config,
-    );
+    let system_parts =
+        opencoder_session::system_prompt::build(&agent_def.system_prompt, project_dir, config);
     let system_text = system_parts.join("\n\n");
     llm_messages.push(ChatMessage::text(Role::System, &system_text));
 
@@ -315,12 +312,12 @@ fn build_llm_messages(
                         Part::Tool(tool) => {
                             // Add tool_use content part
                             let input = match &tool.state {
-                                opencoder_session::message::ToolState::Pending { input, .. } => {
-                                    input.clone()
-                                }
-                                opencoder_session::message::ToolState::Running { input, .. } => {
-                                    input.clone()
-                                }
+                                opencoder_session::message::ToolState::Pending {
+                                    input, ..
+                                } => input.clone(),
+                                opencoder_session::message::ToolState::Running {
+                                    input, ..
+                                } => input.clone(),
                                 opencoder_session::message::ToolState::Completed {
                                     input, ..
                                 } => input.clone(),
@@ -349,9 +346,7 @@ fn build_llm_messages(
                 for part_with_id in &msg_with_parts.parts {
                     if let Part::Tool(tool) = &part_with_id.part {
                         match &tool.state {
-                            opencoder_session::message::ToolState::Completed {
-                                output, ..
-                            } => {
+                            opencoder_session::message::ToolState::Completed { output, .. } => {
                                 llm_messages.push(ChatMessage::tool_result(
                                     &tool.call_id,
                                     output,
@@ -377,13 +372,11 @@ fn build_llm_messages(
 }
 
 /// Check for context overflow and run compaction if needed.
-async fn maybe_compact(
-    config: &AgentLoopConfig,
-    session_svc: &SessionService,
-    input_tokens: &u64,
-) {
+async fn maybe_compact(config: &AgentLoopConfig, session_svc: &SessionService, input_tokens: &u64) {
     // Only compact if auto-compaction is enabled (default: true)
-    let auto = config.config.compaction
+    let auto = config
+        .config
+        .compaction
         .as_ref()
         .and_then(|c| c.auto)
         .unwrap_or(true);
@@ -396,25 +389,28 @@ async fn maybe_compact(
     let models_db = ModelsDb::load();
     let model_info = models_db.get(&provider_id, &model_id);
 
-    let context_limit = model_info.as_ref()
+    let context_limit = model_info
+        .as_ref()
         .and_then(|m| m.context_length)
         .unwrap_or(200_000);
-    let max_output = model_info.as_ref()
+    let max_output = model_info
+        .as_ref()
         .and_then(|m| m.max_output)
         .unwrap_or(8_192);
 
     if compaction::is_overflow(*input_tokens, context_limit, max_output, &config.config) {
         info!(
             input_tokens,
-            context_limit,
-            "context overflow detected, running compaction"
+            context_limit, "context overflow detected, running compaction"
         );
         if let Err(e) = compaction::process(
             &config.session_id,
             session_svc,
             &config.provider,
             &config.model,
-        ).await {
+        )
+        .await
+        {
             warn!("compaction failed: {e}");
         }
     }

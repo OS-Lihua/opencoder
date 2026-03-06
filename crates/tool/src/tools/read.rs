@@ -68,7 +68,10 @@ impl Tool for ReadTool {
             .as_str()
             .ok_or_else(|| anyhow::anyhow!("missing 'file_path' parameter"))?;
         let offset = params["offset"].as_u64().map(|v| v as usize);
-        let limit = params["limit"].as_u64().map(|v| v as usize).unwrap_or(DEFAULT_LIMIT);
+        let limit = params["limit"]
+            .as_u64()
+            .map(|v| v as usize)
+            .unwrap_or(DEFAULT_LIMIT);
 
         let path = Path::new(file_path);
 

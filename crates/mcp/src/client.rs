@@ -117,7 +117,9 @@ impl McpClient {
         }
 
         // Send initialized notification
-        self.transport.notify("notifications/initialized", None).await?;
+        self.transport
+            .notify("notifications/initialized", None)
+            .await?;
 
         // Fetch tools if supported
         if self.capabilities.tools.is_some() {
@@ -150,8 +152,8 @@ impl McpClient {
     /// Refresh the list of available resources.
     pub async fn refresh_resources(&mut self) -> Result<()> {
         let result = self.transport.request("resources/list", None).await?;
-        let resources_result: ResourcesListResult = serde_json::from_value(result)
-            .unwrap_or(ResourcesListResult {
+        let resources_result: ResourcesListResult =
+            serde_json::from_value(result).unwrap_or(ResourcesListResult {
                 resources: Vec::new(),
             });
         self.resources = resources_result.resources;
@@ -162,7 +164,9 @@ impl McpClient {
     pub async fn refresh_prompts(&mut self) -> Result<()> {
         let result = self.transport.request("prompts/list", None).await?;
         let prompts_result: PromptsListResult =
-            serde_json::from_value(result).unwrap_or(PromptsListResult { prompts: Vec::new() });
+            serde_json::from_value(result).unwrap_or(PromptsListResult {
+                prompts: Vec::new(),
+            });
         self.prompts = prompts_result.prompts;
         Ok(())
     }
@@ -257,7 +261,10 @@ pub fn mcp_tools_to_tool_defs(
         .map(|t| opencoder_provider::ToolDefinition {
             name: format!("mcp__{}__{}", server_name, t.name),
             description: t.description.clone().unwrap_or_default(),
-            parameters: t.input_schema.clone().unwrap_or(serde_json::json!({"type": "object"})),
+            parameters: t
+                .input_schema
+                .clone()
+                .unwrap_or(serde_json::json!({"type": "object"})),
         })
         .collect()
 }
@@ -282,7 +289,8 @@ mod tests {
 
     #[test]
     fn server_config_deserialize() {
-        let json = r#"{"command": "npx", "args": ["-y", "@modelcontextprotocol/server-filesystem"]}"#;
+        let json =
+            r#"{"command": "npx", "args": ["-y", "@modelcontextprotocol/server-filesystem"]}"#;
         let config: McpServerConfig = serde_json::from_str(json).unwrap();
         assert_eq!(config.command.as_deref(), Some("npx"));
         assert_eq!(config.args.len(), 2);

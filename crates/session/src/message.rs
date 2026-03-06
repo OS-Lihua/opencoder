@@ -373,9 +373,16 @@ mod tests {
     #[test]
     fn roundtrip_all_part_types() {
         let parts = vec![
-            Part::Text(TextPart { content: "hi".into() }),
-            Part::Reasoning(ReasoningPart { content: "thinking...".into(), reasoning: None }),
-            Part::Snapshot(SnapshotPart { hash: "abc123".into() }),
+            Part::Text(TextPart {
+                content: "hi".into(),
+            }),
+            Part::Reasoning(ReasoningPart {
+                content: "thinking...".into(),
+                reasoning: None,
+            }),
+            Part::Snapshot(SnapshotPart {
+                hash: "abc123".into(),
+            }),
             Part::Patch(PatchPart {
                 file_path: "/a.rs".into(),
                 content: "+line".into(),
@@ -395,9 +402,18 @@ mod tests {
                 finish_reason: "stop".into(),
                 usage: UsageInfo::default(),
             }),
-            Part::Agent(AgentPart { agent: "build".into() }),
-            Part::Retry(RetryPart { attempt: 1, error: "rate limited".into(), next: 5000 }),
-            Part::Compaction(CompactionPart { summary: "summarized".into(), compacted_count: 10 }),
+            Part::Agent(AgentPart {
+                agent: "build".into(),
+            }),
+            Part::Retry(RetryPart {
+                attempt: 1,
+                error: "rate limited".into(),
+                next: 5000,
+            }),
+            Part::Compaction(CompactionPart {
+                summary: "summarized".into(),
+                compacted_count: 10,
+            }),
             Part::Subtask(SubtaskPart {
                 session_id: "ses_abc".into(),
                 title: "subtask".into(),

@@ -23,7 +23,9 @@ pub fn router() -> Router<S> {
 }
 
 async fn health() -> Json<HealthResponse> {
-    Json(HealthResponse { status: "ok".into() })
+    Json(HealthResponse {
+        status: "ok".into(),
+    })
 }
 
 #[derive(Serialize)]
@@ -43,9 +45,7 @@ struct VersionResponse {
 }
 
 /// SSE endpoint for real-time bus events.
-async fn events_sse(
-    State(state): State<S>,
-) -> Sse<impl Stream<Item = Result<Event, Infallible>>> {
+async fn events_sse(State(state): State<S>) -> Sse<impl Stream<Item = Result<Event, Infallible>>> {
     let mut rx = state.bus.subscribe();
 
     let stream = async_stream::stream! {

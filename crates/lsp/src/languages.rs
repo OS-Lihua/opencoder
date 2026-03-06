@@ -82,34 +82,55 @@ pub fn extension_to_language() -> HashMap<&'static str, &'static str> {
 /// Known LSP server commands for common languages.
 pub fn language_servers() -> HashMap<&'static str, LspServerInfo> {
     let mut m = HashMap::new();
-    m.insert("rust", LspServerInfo {
-        command: "rust-analyzer",
-        args: &[],
-    });
-    m.insert("typescript", LspServerInfo {
-        command: "typescript-language-server",
-        args: &["--stdio"],
-    });
-    m.insert("javascript", LspServerInfo {
-        command: "typescript-language-server",
-        args: &["--stdio"],
-    });
-    m.insert("python", LspServerInfo {
-        command: "pyright-langserver",
-        args: &["--stdio"],
-    });
-    m.insert("go", LspServerInfo {
-        command: "gopls",
-        args: &[],
-    });
-    m.insert("c", LspServerInfo {
-        command: "clangd",
-        args: &[],
-    });
-    m.insert("cpp", LspServerInfo {
-        command: "clangd",
-        args: &[],
-    });
+    m.insert(
+        "rust",
+        LspServerInfo {
+            command: "rust-analyzer",
+            args: &[],
+        },
+    );
+    m.insert(
+        "typescript",
+        LspServerInfo {
+            command: "typescript-language-server",
+            args: &["--stdio"],
+        },
+    );
+    m.insert(
+        "javascript",
+        LspServerInfo {
+            command: "typescript-language-server",
+            args: &["--stdio"],
+        },
+    );
+    m.insert(
+        "python",
+        LspServerInfo {
+            command: "pyright-langserver",
+            args: &["--stdio"],
+        },
+    );
+    m.insert(
+        "go",
+        LspServerInfo {
+            command: "gopls",
+            args: &[],
+        },
+    );
+    m.insert(
+        "c",
+        LspServerInfo {
+            command: "clangd",
+            args: &[],
+        },
+    );
+    m.insert(
+        "cpp",
+        LspServerInfo {
+            command: "clangd",
+            args: &[],
+        },
+    );
     m
 }
 

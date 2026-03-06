@@ -14,7 +14,7 @@ use tracing::{debug, warn};
 
 use crate::provider::{
     ChatMessage, ChatRequest, ChatResponse, ContentPart, FinishReason, LlmProvider, Role,
-    StreamEvent, ToolCall, ToolDefinition, Usage,
+    StreamEvent, ToolCall, Usage,
 };
 use crate::sse::{self, parse_sse_json};
 
@@ -70,7 +70,10 @@ impl OpenAiProvider {
     fn build_request_body(&self, request: &ChatRequest, stream: bool) -> Result<serde_json::Value> {
         let mut body = serde_json::Map::new();
 
-        body.insert("model".into(), serde_json::Value::String(request.model.clone()));
+        body.insert(
+            "model".into(),
+            serde_json::Value::String(request.model.clone()),
+        );
 
         // Convert messages.
         let messages: Vec<serde_json::Value> = request
@@ -81,23 +84,26 @@ impl OpenAiProvider {
         body.insert("messages".into(), serde_json::Value::Array(messages));
 
         // Temperature.
-        if let Some(temp) = request.temperature {
-            if let Some(n) = serde_json::Number::from_f64(temp) {
-                body.insert("temperature".into(), serde_json::Value::Number(n));
-            }
+        if let Some(temp) = request.temperature
+            && let Some(n) = serde_json::Number::from_f64(temp)
+        {
+            body.insert("temperature".into(), serde_json::Value::Number(n));
         }
 
         // Top-p.
-        if let Some(top_p) = request.top_p {
-            if let Some(n) = serde_json::Number::from_f64(top_p) {
-                body.insert("top_p".into(), serde_json::Value::Number(n));
-            }
+        if let Some(top_p) = request.top_p
+            && let Some(n) = serde_json::Number::from_f64(top_p)
+        {
+            body.insert("top_p".into(), serde_json::Value::Number(n));
         }
 
         // Max tokens - OpenAI uses either max_tokens or max_completion_tokens.
         if let Some(max_tokens) = request.max_tokens {
             // Newer models use max_completion_tokens.
-            let key = if request.provider_options.contains_key("use_max_completion_tokens") {
+            let key = if request
+                .provider_options
+                .contains_key("use_max_completion_tokens")
+            {
                 "max_completion_tokens"
             } else {
                 "max_tokens"
@@ -214,14 +220,12 @@ impl OpenAiProvider {
                             ContentPart::Text { text } => {
                                 Some(serde_json::json!({"type": "text", "text": text}))
                             }
-                            ContentPart::Image { data, media_type } => {
-                                Some(serde_json::json!({
-                                    "type": "image_url",
-                                    "image_url": {
-                                        "url": format!("data:{};base64,{}", media_type, data),
-                                    }
-                                }))
-                            }
+                            ContentPart::Image { data, media_type } => Some(serde_json::json!({
+                                "type": "image_url",
+                                "image_url": {
+                                    "url": format!("data:{};base64,{}", media_type, data),
+                                }
+                            })),
                             _ => None,
                         })
                         .collect();
@@ -288,9 +292,8 @@ impl OpenAiProvider {
         }
 
         let usage = parse_openai_usage(&body["usage"]);
-        let finish_reason = parse_openai_finish_reason(
-            choice["finish_reason"].as_str().unwrap_or("stop"),
-        );
+        let finish_reason =
+            parse_openai_finish_reason(choice["finish_reason"].as_str().unwrap_or("stop"));
 
         Ok(ChatResponse {
             content,
@@ -332,11 +335,7 @@ impl LlmProvider for OpenAiProvider {
         &self.provider_name
     }
 
-    async fn chat(
-        &self,
-        request: ChatRequest,
-        cancel: CancellationToken,
-    ) -> Result<ChatResponse> {
+    async fn chat(&self, request: ChatRequest, cancel: CancellationToken) -> Result<ChatResponse> {
         let body = self.build_request_body(&request, false)?;
         let headers = self.build_headers();
         let url = format!("{}/v1/chat/completions", self.base_url);
@@ -434,23 +433,23 @@ impl OpenAiStreamAdapter {
         };
 
         // Check for usage-only chunk (sent at end with stream_options.include_usage).
-        if let Some(usage) = data.get("usage") {
-            if !usage.is_null() {
-                let parsed_usage = parse_openai_usage(usage);
+        if let Some(usage) = data.get("usage")
+            && !usage.is_null()
+        {
+            let parsed_usage = parse_openai_usage(usage);
 
-                // Determine finish reason from the last choice, if present.
-                let finish_reason = data["choices"]
-                    .as_array()
-                    .and_then(|c| c.first())
-                    .and_then(|c| c["finish_reason"].as_str())
-                    .map(parse_openai_finish_reason)
-                    .unwrap_or(FinishReason::Stop);
+            // Determine finish reason from the last choice, if present.
+            let finish_reason = data["choices"]
+                .as_array()
+                .and_then(|c| c.first())
+                .and_then(|c| c["finish_reason"].as_str())
+                .map(parse_openai_finish_reason)
+                .unwrap_or(FinishReason::Stop);
 
-                output.push(Ok(StreamEvent::StepFinish {
-                    finish_reason,
-                    usage: parsed_usage,
-                }));
-            }
+            output.push(Ok(StreamEvent::StepFinish {
+                finish_reason,
+                usage: parsed_usage,
+            }));
         }
 
         // Process choices.
@@ -459,17 +458,17 @@ impl OpenAiStreamAdapter {
                 let delta = &choice["delta"];
 
                 // Text content delta.
-                if let Some(content) = delta["content"].as_str() {
-                    if !content.is_empty() {
-                        output.push(Ok(StreamEvent::TextDelta(content.to_string())));
-                    }
+                if let Some(content) = delta["content"].as_str()
+                    && !content.is_empty()
+                {
+                    output.push(Ok(StreamEvent::TextDelta(content.to_string())));
                 }
 
                 // Reasoning content (for o-series models).
-                if let Some(reasoning) = delta.get("reasoning_content").and_then(|r| r.as_str()) {
-                    if !reasoning.is_empty() {
-                        output.push(Ok(StreamEvent::ReasoningDelta(reasoning.to_string())));
-                    }
+                if let Some(reasoning) = delta.get("reasoning_content").and_then(|r| r.as_str())
+                    && !reasoning.is_empty()
+                {
+                    output.push(Ok(StreamEvent::ReasoningDelta(reasoning.to_string())));
                 }
 
                 // Tool calls.
@@ -478,26 +477,24 @@ impl OpenAiStreamAdapter {
                         let index = tc["index"].as_u64().unwrap_or(0) as usize;
                         let func = &tc["function"];
 
-                        if !self.active_tool_calls.contains_key(&index) {
+                        if let std::collections::hash_map::Entry::Vacant(e) =
+                            self.active_tool_calls.entry(index)
+                        {
                             // New tool call.
-                            self.active_tool_calls.insert(index, true);
+                            e.insert(true);
                             let id = tc["id"].as_str().unwrap_or_default().to_string();
                             let name = func["name"].as_str().unwrap_or_default().to_string();
-                            output.push(Ok(StreamEvent::ToolCallStart {
-                                index,
-                                id,
-                                name,
-                            }));
+                            output.push(Ok(StreamEvent::ToolCallStart { index, id, name }));
                         }
 
                         // Arguments delta.
-                        if let Some(args) = func["arguments"].as_str() {
-                            if !args.is_empty() {
-                                output.push(Ok(StreamEvent::ToolCallDelta {
-                                    index,
-                                    arguments_delta: args.to_string(),
-                                }));
-                            }
+                        if let Some(args) = func["arguments"].as_str()
+                            && !args.is_empty()
+                        {
+                            output.push(Ok(StreamEvent::ToolCallDelta {
+                                index,
+                                arguments_delta: args.to_string(),
+                            }));
                         }
                     }
                 }
@@ -557,6 +554,7 @@ impl Stream for OpenAiStreamAdapter {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::provider::ToolDefinition;
 
     #[test]
     fn test_build_request_body_basic() {
@@ -702,7 +700,8 @@ mod tests {
 
         let events = adapter.process_event(sse::SseEvent {
             event: None,
-            data: r#"{"choices":[{"index":0,"delta":{"content":"Hello"},"finish_reason":null}]}"#.into(),
+            data: r#"{"choices":[{"index":0,"delta":{"content":"Hello"},"finish_reason":null}]}"#
+                .into(),
         });
 
         assert_eq!(events.len(), 1);
@@ -721,7 +720,7 @@ mod tests {
             event: None,
             data: r#"{"choices":[{"index":0,"delta":{"tool_calls":[{"index":0,"id":"call_1","type":"function","function":{"name":"read_file","arguments":""}}]},"finish_reason":null}]}"#.into(),
         });
-        assert!(events.len() >= 1);
+        assert!(!events.is_empty());
         match &events[0] {
             Ok(StreamEvent::ToolCallStart { index, id, name }) => {
                 assert_eq!(*index, 0);
@@ -738,7 +737,10 @@ mod tests {
         });
         assert_eq!(events.len(), 1);
         match &events[0] {
-            Ok(StreamEvent::ToolCallDelta { index, arguments_delta }) => {
+            Ok(StreamEvent::ToolCallDelta {
+                index,
+                arguments_delta,
+            }) => {
                 assert_eq!(*index, 0);
                 assert_eq!(arguments_delta, "{\"path\":");
             }
@@ -756,11 +758,15 @@ mod tests {
         });
 
         // Should produce a StepFinish event.
-        let step_finish = events.iter().find(|e| {
-            matches!(e, Ok(StreamEvent::StepFinish { .. }))
-        });
+        let step_finish = events
+            .iter()
+            .find(|e| matches!(e, Ok(StreamEvent::StepFinish { .. })));
         assert!(step_finish.is_some());
-        if let Ok(StreamEvent::StepFinish { usage, finish_reason }) = step_finish.unwrap() {
+        if let Ok(StreamEvent::StepFinish {
+            usage,
+            finish_reason,
+        }) = step_finish.unwrap()
+        {
             assert_eq!(usage.input_tokens, 25);
             assert_eq!(usage.output_tokens, 10);
             assert_eq!(*finish_reason, FinishReason::Stop);
@@ -780,12 +786,8 @@ mod tests {
 
     #[test]
     fn test_openai_compatible_provider() {
-        let provider = OpenAiProvider::new_compatible(
-            "key-123",
-            "https://api.groq.com",
-            "groq",
-            "Groq",
-        );
+        let provider =
+            OpenAiProvider::new_compatible("key-123", "https://api.groq.com", "groq", "Groq");
 
         assert_eq!(provider.id(), "groq");
         assert_eq!(provider.name(), "Groq");

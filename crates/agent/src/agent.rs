@@ -133,11 +133,7 @@ pub fn builtin_agents() -> HashMap<String, AgentDef> {
                 "grep".to_string(),
                 "question".to_string(),
             ],
-            denied_tools: vec![
-                "bash".to_string(),
-                "write".to_string(),
-                "edit".to_string(),
-            ],
+            denied_tools: vec!["bash".to_string(), "write".to_string(), "edit".to_string()],
             permission_rules: vec![
                 PermissionRule {
                     tool: "read".to_string(),
@@ -190,16 +186,8 @@ pub fn builtin_agents() -> HashMap<String, AgentDef> {
             hidden: false,
             color: Some("cyan".to_string()),
             max_steps: 50,
-            allowed_tools: vec![
-                "read".to_string(),
-                "glob".to_string(),
-                "grep".to_string(),
-            ],
-            denied_tools: vec![
-                "bash".to_string(),
-                "write".to_string(),
-                "edit".to_string(),
-            ],
+            allowed_tools: vec!["read".to_string(), "glob".to_string(), "grep".to_string()],
+            denied_tools: vec!["bash".to_string(), "write".to_string(), "edit".to_string()],
             permission_rules: vec![
                 PermissionRule {
                     tool: "read".to_string(),

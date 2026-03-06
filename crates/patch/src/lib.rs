@@ -66,7 +66,12 @@ pub fn parse_patch(text: &str) -> anyhow::Result<Patch> {
             continue;
         }
         if line.starts_with("*** End Patch") {
-            flush_file(&mut files, &mut current_path, &mut current_action, &mut current_content);
+            flush_file(
+                &mut files,
+                &mut current_path,
+                &mut current_action,
+                &mut current_content,
+            );
             break;
         }
         if !in_patch {
@@ -74,15 +79,30 @@ pub fn parse_patch(text: &str) -> anyhow::Result<Patch> {
         }
 
         if let Some(path) = line.strip_prefix("*** Add File: ") {
-            flush_file(&mut files, &mut current_path, &mut current_action, &mut current_content);
+            flush_file(
+                &mut files,
+                &mut current_path,
+                &mut current_action,
+                &mut current_content,
+            );
             current_path = Some(path.trim().to_string());
             current_action = Some(PatchAction::Add);
         } else if let Some(path) = line.strip_prefix("*** Update File: ") {
-            flush_file(&mut files, &mut current_path, &mut current_action, &mut current_content);
+            flush_file(
+                &mut files,
+                &mut current_path,
+                &mut current_action,
+                &mut current_content,
+            );
             current_path = Some(path.trim().to_string());
             current_action = Some(PatchAction::Update);
         } else if let Some(path) = line.strip_prefix("*** Delete File: ") {
-            flush_file(&mut files, &mut current_path, &mut current_action, &mut current_content);
+            flush_file(
+                &mut files,
+                &mut current_path,
+                &mut current_action,
+                &mut current_content,
+            );
             current_path = Some(path.trim().to_string());
             current_action = Some(PatchAction::Delete);
         } else {
@@ -126,7 +146,10 @@ pub fn apply_patch(
     for fp in &patch.files {
         match fp.action {
             PatchAction::Add => {
-                results.insert(fp.path.clone(), Some(fp.content.clone().unwrap_or_default()));
+                results.insert(
+                    fp.path.clone(),
+                    Some(fp.content.clone().unwrap_or_default()),
+                );
             }
             PatchAction::Delete => {
                 results.insert(fp.path.clone(), None);
@@ -163,11 +186,9 @@ fn apply_hunks_simple(original: &str, patch_content: &str) -> String {
             orig_idx += 1;
         } else if line.starts_with("@@") {
             // Hunk header — skip
-        } else {
-            if orig_idx < orig_lines.len() {
-                result.push(orig_lines[orig_idx].to_string());
-                orig_idx += 1;
-            }
+        } else if orig_idx < orig_lines.len() {
+            result.push(orig_lines[orig_idx].to_string());
+            orig_idx += 1;
         }
     }
 

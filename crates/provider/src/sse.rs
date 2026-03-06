@@ -53,7 +53,10 @@ impl SseStream {
 impl Stream for SseStream {
     type Item = Result<SseEvent>;
 
-    fn poll_next(self: Pin<&mut Self>, cx: &mut std::task::Context<'_>) -> Poll<Option<Self::Item>> {
+    fn poll_next(
+        self: Pin<&mut Self>,
+        cx: &mut std::task::Context<'_>,
+    ) -> Poll<Option<Self::Item>> {
         let this = self.get_mut();
 
         if this.done {
@@ -148,15 +151,12 @@ fn try_extract_event(
 
 /// Parse a single SSE data line as JSON.
 pub fn parse_sse_json<T: serde::de::DeserializeOwned>(data: &str) -> Result<T> {
-    serde_json::from_str(data).with_context(|| format!("Failed to parse SSE JSON: {}", truncate(data, 200)))
+    serde_json::from_str(data)
+        .with_context(|| format!("Failed to parse SSE JSON: {}", truncate(data, 200)))
 }
 
 fn truncate(s: &str, max_len: usize) -> &str {
-    if s.len() <= max_len {
-        s
-    } else {
-        &s[..max_len]
-    }
+    if s.len() <= max_len { s } else { &s[..max_len] }
 }
 
 #[cfg(test)]
@@ -166,7 +166,6 @@ mod tests {
 
     /// Helper: create a stream of SseEvents from raw SSE text.
     async fn parse_raw_sse(raw: &str) -> Vec<SseEvent> {
-        let mut buffer = String::new();
         let mut current_event: Option<String> = None;
         let mut current_data: Vec<String> = Vec::new();
         let mut events = Vec::new();
@@ -344,13 +343,23 @@ data: [DONE]
 
         // First chunk: incomplete line.
         buffer.push_str("data: {\"te");
-        let result = try_extract_event(&mut buffer, &mut current_event, &mut current_data, &mut done);
+        let result = try_extract_event(
+            &mut buffer,
+            &mut current_event,
+            &mut current_data,
+            &mut done,
+        );
         assert!(result.is_none());
         assert_eq!(buffer, "data: {\"te");
 
         // Second chunk: completes the line and adds empty delimiter.
         buffer.push_str("xt\": \"hi\"}\n\n");
-        let result = try_extract_event(&mut buffer, &mut current_event, &mut current_data, &mut done);
+        let result = try_extract_event(
+            &mut buffer,
+            &mut current_event,
+            &mut current_data,
+            &mut done,
+        );
         assert!(result.is_some());
         let event = result.unwrap().unwrap();
         assert_eq!(event.data, "{\"text\": \"hi\"}");
@@ -363,7 +372,12 @@ data: [DONE]
         let mut current_data: Vec<String> = Vec::new();
         let mut done = false;
 
-        let result = try_extract_event(&mut buffer, &mut current_event, &mut current_data, &mut done);
+        let result = try_extract_event(
+            &mut buffer,
+            &mut current_event,
+            &mut current_data,
+            &mut done,
+        );
         assert!(result.is_none());
         assert!(done);
     }

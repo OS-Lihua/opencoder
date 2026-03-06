@@ -10,19 +10,20 @@ pub fn render(f: &mut Frame, app: &App) {
     let chunks = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
-            Constraint::Length(3),  // title
+            Constraint::Length(3), // title
             Constraint::Min(5),    // session list
             Constraint::Length(3), // status bar
         ])
         .split(f.area());
 
     // Title
-    let title = Paragraph::new(format!(
-        " opencoder v{} ",
-        env!("CARGO_PKG_VERSION")
-    ))
-    .style(theme::title_style())
-    .block(Block::default().borders(Borders::ALL).style(theme::border_style()));
+    let title = Paragraph::new(format!(" opencoder v{} ", env!("CARGO_PKG_VERSION")))
+        .style(theme::title_style())
+        .block(
+            Block::default()
+                .borders(Borders::ALL)
+                .style(theme::border_style()),
+        );
     f.render_widget(title, chunks[0]);
 
     // Session list
@@ -70,6 +71,10 @@ pub fn render(f: &mut Frame, app: &App) {
     // Status bar
     let status = Paragraph::new(" n=New  d=Delete  Enter=Open  /=Search  q=Quit")
         .style(theme::dim_style())
-        .block(Block::default().borders(Borders::ALL).style(theme::border_style()));
+        .block(
+            Block::default()
+                .borders(Borders::ALL)
+                .style(theme::border_style()),
+        );
     f.render_widget(status, chunks[2]);
 }

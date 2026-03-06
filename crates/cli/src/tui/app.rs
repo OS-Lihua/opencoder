@@ -5,16 +5,16 @@ use std::sync::Arc;
 
 use anyhow::Result;
 
-use opencoder_agent::agent_loop::{self, AgentLoopConfig};
 use opencoder_agent::AgentRegistry;
+use opencoder_agent::agent_loop::{self, AgentLoopConfig};
 use opencoder_core::bus::{Bus, Event as BusEvent};
 use opencoder_core::config::Config;
 use opencoder_core::storage::Database;
 use opencoder_project::ProjectService;
 use opencoder_provider::init as provider_init;
 use opencoder_provider::provider::LlmProvider;
-use opencoder_session::session::SessionService;
 use opencoder_session::Session;
+use opencoder_session::session::SessionService;
 use opencoder_tool::ToolRegistry;
 
 /// Current screen.
@@ -80,6 +80,7 @@ pub struct App {
 }
 
 impl App {
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         db: Arc<Database>,
         bus: Bus,
@@ -219,7 +220,11 @@ impl App {
         let content = std::mem::take(&mut self.input);
         let session = self.current_session.as_ref().unwrap();
 
-        let model_str = self.config.model.as_deref().unwrap_or("anthropic/claude-sonnet-4-20250514");
+        let model_str = self
+            .config
+            .model
+            .as_deref()
+            .unwrap_or("anthropic/claude-sonnet-4-20250514");
         let (_, model_id) = provider_init::parse_model_str(model_str);
 
         let cancel = tokio_util::sync::CancellationToken::new();
@@ -251,7 +256,9 @@ impl App {
                 &agent_registry,
                 tools,
                 &bus,
-            ).await {
+            )
+            .await
+            {
                 tracing::error!(error = %e, "agent loop failed");
             }
         });

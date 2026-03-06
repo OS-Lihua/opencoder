@@ -64,7 +64,10 @@ impl Tool for EditTool {
 
         let (new_content, count) = if params.replace_all {
             let count = content.matches(&params.old_string).count();
-            (content.replace(&params.old_string, &params.new_string), count)
+            (
+                content.replace(&params.old_string, &params.new_string),
+                count,
+            )
         } else {
             // Try exact match first
             match try_replace(&content, &params.old_string, &params.new_string) {
@@ -114,10 +117,7 @@ impl Tool for EditTool {
 
         Ok(ToolOutput {
             title: format!("Edit {}", params.file_path),
-            output: format!(
-                "Replaced {} occurrence(s) in {}",
-                count, params.file_path
-            ),
+            output: format!("Replaced {} occurrence(s) in {}", count, params.file_path),
             metadata: serde_json::json!({
                 "file_path": params.file_path,
                 "replacements": count,
@@ -195,9 +195,7 @@ fn try_replace_trimmed(content: &str, old: &str, new: &str) -> Option<String> {
 
 /// Strategy 3: whitespace-normalized matching.
 fn try_replace_normalized(content: &str, old: &str, new: &str) -> Option<String> {
-    let normalize = |s: &str| -> String {
-        s.split_whitespace().collect::<Vec<_>>().join(" ")
-    };
+    let normalize = |s: &str| -> String { s.split_whitespace().collect::<Vec<_>>().join(" ") };
 
     let norm_content = normalize(content);
     let norm_old = normalize(old);

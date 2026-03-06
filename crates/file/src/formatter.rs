@@ -28,7 +28,9 @@ const FORMATTERS: &[FormatterDef] = &[
         name: "prettier",
         command: "npx",
         args: &["prettier", "--write"],
-        extensions: &["js", "jsx", "ts", "tsx", "json", "css", "scss", "md", "yaml", "yml"],
+        extensions: &[
+            "js", "jsx", "ts", "tsx", "json", "css", "scss", "md", "yaml", "yml",
+        ],
     },
     FormatterDef {
         name: "gofmt",

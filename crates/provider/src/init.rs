@@ -32,7 +32,11 @@ const OPENAI_COMPATIBLE: &[(&str, &str, &str)] = &[
     ("groq", "https://api.groq.com/openai", "Groq"),
     ("openrouter", "https://openrouter.ai/api", "OpenRouter"),
     ("together", "https://api.together.xyz", "Together"),
-    ("fireworks", "https://api.fireworks.ai/inference", "Fireworks"),
+    (
+        "fireworks",
+        "https://api.fireworks.ai/inference",
+        "Fireworks",
+    ),
     ("deepseek", "https://api.deepseek.com", "DeepSeek"),
     ("mistral", "https://api.mistral.ai", "Mistral"),
     ("xai", "https://api.x.ai", "xAI"),
@@ -82,10 +86,10 @@ fn find_api_key(provider_id: &str) -> Option<String> {
     for &(id, keys) in PROVIDER_ENV_KEYS {
         if id == provider_id {
             for key in keys {
-                if let Ok(val) = std::env::var(key) {
-                    if !val.is_empty() {
-                        return Some(val);
-                    }
+                if let Ok(val) = std::env::var(key)
+                    && !val.is_empty()
+                {
+                    return Some(val);
                 }
             }
         }
@@ -100,32 +104,39 @@ fn find_api_key(provider_id: &str) -> Option<String> {
 pub fn build_provider(model_str: &str) -> Result<(Arc<dyn LlmProvider>, String)> {
     let (provider_id, model_id) = parse_model_str(model_str);
 
-    let api_key = find_api_key(&provider_id)
-        .ok_or_else(|| {
-            let env_keys: Vec<_> = PROVIDER_ENV_KEYS
+    let api_key = find_api_key(&provider_id).ok_or_else(|| {
+        let env_keys: Vec<_> = PROVIDER_ENV_KEYS
+            .iter()
+            .filter(|(id, _)| *id == provider_id)
+            .flat_map(|(_, keys)| keys.iter())
+            .collect();
+        let keys_str = if env_keys.is_empty() {
+            format!("{}_API_KEY", provider_id.to_uppercase())
+        } else {
+            env_keys
                 .iter()
-                .filter(|(id, _)| *id == provider_id)
-                .flat_map(|(_, keys)| keys.iter())
-                .collect();
-            let keys_str = if env_keys.is_empty() {
-                format!("{}_API_KEY", provider_id.to_uppercase())
-            } else {
-                env_keys.iter().map(|k| k.to_string()).collect::<Vec<_>>().join(" or ")
-            };
-            anyhow::anyhow!(
-                "No API key found for provider '{}'. Set {}",
-                provider_id,
-                keys_str
-            )
-        })?;
+                .map(|k| k.to_string())
+                .collect::<Vec<_>>()
+                .join(" or ")
+        };
+        anyhow::anyhow!(
+            "No API key found for provider '{}'. Set {}",
+            provider_id,
+            keys_str
+        )
+    })?;
 
     let provider: Arc<dyn LlmProvider> = match provider_id.as_str() {
         "anthropic" => Arc::new(AnthropicProvider::new(api_key)),
         "openai" => Arc::new(OpenAiProvider::new(api_key)),
         other => {
             // Check if it's an OpenAI-compatible provider
-            if let Some(&(_, base_url, name)) = OPENAI_COMPATIBLE.iter().find(|(id, _, _)| *id == other) {
-                Arc::new(OpenAiProvider::new_compatible(api_key, base_url, other, name))
+            if let Some(&(_, base_url, name)) =
+                OPENAI_COMPATIBLE.iter().find(|(id, _, _)| *id == other)
+            {
+                Arc::new(OpenAiProvider::new_compatible(
+                    api_key, base_url, other, name,
+                ))
             } else {
                 bail!(
                     "Unknown provider '{}'. Supported: anthropic, openai, groq, openrouter, together, fireworks, deepseek, mistral, xai",
@@ -146,10 +157,7 @@ pub fn build_provider_with_config(
     let (provider_id, model_id) = parse_model_str(model_str);
 
     // Check config for provider-specific overrides
-    let provider_cfg = config
-        .provider
-        .as_ref()
-        .and_then(|p| p.get(&provider_id));
+    let provider_cfg = config.provider.as_ref().and_then(|p| p.get(&provider_id));
 
     // API key: config override > env var
     let api_key = provider_cfg
@@ -184,13 +192,16 @@ pub fn build_provider_with_config(
             Arc::new(p)
         }
         other => {
-            if let Some(&(_, default_url, name)) = OPENAI_COMPATIBLE.iter().find(|(id, _, _)| *id == other) {
+            if let Some(&(_, default_url, name)) =
+                OPENAI_COMPATIBLE.iter().find(|(id, _, _)| *id == other)
+            {
                 let url = base_url_override.unwrap_or_else(|| default_url.to_string());
                 Arc::new(OpenAiProvider::new_compatible(api_key, url, other, name))
             } else {
                 // Treat as generic OpenAI-compatible
-                let url = base_url_override
-                    .ok_or_else(|| anyhow::anyhow!("Unknown provider '{}' requires a base_url in config", other))?;
+                let url = base_url_override.ok_or_else(|| {
+                    anyhow::anyhow!("Unknown provider '{}' requires a base_url in config", other)
+                })?;
                 Arc::new(OpenAiProvider::new_compatible(api_key, url, other, other))
             }
         }

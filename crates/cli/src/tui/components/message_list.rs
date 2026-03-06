@@ -1,10 +1,9 @@
 //! Message list rendering component.
 
-use ratatui::prelude::*;
 use ratatui::text::{Line, Span};
 
-use opencoder_session::message::*;
 use opencoder_session::MessageWithParts;
+use opencoder_session::message::*;
 
 use crate::tui::theme;
 

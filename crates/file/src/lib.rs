@@ -10,4 +10,4 @@ pub mod listing;
 pub mod watcher;
 
 pub use detect::is_binary;
-pub use listing::{list_files, FileEntry};
+pub use listing::{FileEntry, list_files};

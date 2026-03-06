@@ -109,10 +109,10 @@ pub fn start_gc_task(work_dir: PathBuf) {
         let mut interval = tokio::time::interval(std::time::Duration::from_secs(3600));
         loop {
             interval.tick().await;
-            if let Ok(store) = SnapshotStore::new(&work_dir) {
-                if let Err(e) = store.gc(7) {
-                    warn!("snapshot gc error: {e}");
-                }
+            if let Ok(store) = SnapshotStore::new(&work_dir)
+                && let Err(e) = store.gc(7)
+            {
+                warn!("snapshot gc error: {e}");
             }
         }
     });

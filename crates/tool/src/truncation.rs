@@ -19,7 +19,12 @@ pub struct TruncationResult {
 ///
 /// When truncating from "head" (default), keeps the first N lines.
 /// When truncating from "tail", keeps the last N lines.
-pub fn truncate(output: &str, max_lines: usize, max_bytes: usize, from_tail: bool) -> TruncationResult {
+pub fn truncate(
+    output: &str,
+    max_lines: usize,
+    max_bytes: usize,
+    from_tail: bool,
+) -> TruncationResult {
     let lines: Vec<&str> = output.lines().collect();
     let total_lines = lines.len();
     let total_bytes = output.len();
@@ -89,7 +94,10 @@ mod tests {
 
     #[test]
     fn truncate_by_lines() {
-        let input: String = (0..100).map(|i| format!("line {i}")).collect::<Vec<_>>().join("\n");
+        let input: String = (0..100)
+            .map(|i| format!("line {i}"))
+            .collect::<Vec<_>>()
+            .join("\n");
         let result = truncate(&input, 10, MAX_BYTES, false);
         assert!(result.truncated);
         assert!(result.content.contains("line 0"));
@@ -109,7 +117,10 @@ mod tests {
 
     #[test]
     fn truncate_from_tail() {
-        let input: String = (0..100).map(|i| format!("line {i}")).collect::<Vec<_>>().join("\n");
+        let input: String = (0..100)
+            .map(|i| format!("line {i}"))
+            .collect::<Vec<_>>()
+            .join("\n");
         let result = truncate(&input, 10, MAX_BYTES, true);
         assert!(result.truncated);
         assert!(result.content.contains("line 99"));

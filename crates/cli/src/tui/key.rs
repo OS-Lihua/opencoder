@@ -51,7 +51,9 @@ fn handle_session_editing_key(key: KeyEvent) -> Action {
     match key.code {
         KeyCode::Esc => Action::BackToHome,
         KeyCode::Enter => {
-            if key.modifiers.contains(KeyModifiers::ALT) || key.modifiers.contains(KeyModifiers::CONTROL) {
+            if key.modifiers.contains(KeyModifiers::ALT)
+                || key.modifiers.contains(KeyModifiers::CONTROL)
+            {
                 Action::InsertNewline
             } else {
                 Action::SendMessage

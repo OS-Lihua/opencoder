@@ -45,21 +45,17 @@ impl Tool for TaskTool {
         let prompt = params["prompt"]
             .as_str()
             .ok_or_else(|| anyhow::anyhow!("missing 'prompt' parameter"))?;
-        let agent_name = params["agent"]
-            .as_str()
-            .unwrap_or("general");
+        let agent_name = params["agent"].as_str().unwrap_or("general");
 
-        let runner = ctx.agent_runner.as_ref()
-            .ok_or_else(|| anyhow::anyhow!(
+        let runner = ctx.agent_runner.as_ref().ok_or_else(|| {
+            anyhow::anyhow!(
                 "task tool requires agent_runner in context (not available in this execution mode)"
-            ))?;
+            )
+        })?;
 
-        let output = runner.run_sub_agent(
-            prompt,
-            agent_name,
-            &ctx.session_id,
-            ctx.cancel.clone(),
-        ).await?;
+        let output = runner
+            .run_sub_agent(prompt, agent_name, &ctx.session_id, ctx.cancel.clone())
+            .await?;
 
         Ok(ToolOutput {
             title: format!("Task: {description}"),

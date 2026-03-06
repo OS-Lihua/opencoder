@@ -120,15 +120,15 @@ async fn collect_matches(
                 Box::pin(collect_matches(root, &path, glob, matches)).await;
             } else if ft.is_file() {
                 // Match against relative path
-                if let Ok(rel) = path.strip_prefix(root) {
-                    if glob.is_match(rel) {
-                        let mtime = entry
-                            .metadata()
-                            .await
-                            .and_then(|m| m.modified())
-                            .unwrap_or(std::time::UNIX_EPOCH);
-                        matches.push((path, mtime));
-                    }
+                if let Ok(rel) = path.strip_prefix(root)
+                    && glob.is_match(rel)
+                {
+                    let mtime = entry
+                        .metadata()
+                        .await
+                        .and_then(|m| m.modified())
+                        .unwrap_or(std::time::UNIX_EPOCH);
+                    matches.push((path, mtime));
                 }
             }
         }

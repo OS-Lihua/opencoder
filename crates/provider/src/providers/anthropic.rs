@@ -14,8 +14,8 @@ use tokio_util::sync::CancellationToken;
 use tracing::debug;
 
 use crate::provider::{
-    ChatMessage, ChatRequest, ChatResponse, ContentPart, FinishReason, LlmProvider, Role,
-    StreamEvent, ToolCall, ToolDefinition, Usage,
+    ChatRequest, ChatResponse, ContentPart, FinishReason, LlmProvider, Role, StreamEvent, ToolCall,
+    Usage,
 };
 use crate::sse::{self, parse_sse_json};
 
@@ -50,7 +50,10 @@ impl AnthropicProvider {
     fn build_request_body(&self, request: &ChatRequest, stream: bool) -> Result<serde_json::Value> {
         let mut body = serde_json::Map::new();
 
-        body.insert("model".into(), serde_json::Value::String(request.model.clone()));
+        body.insert(
+            "model".into(),
+            serde_json::Value::String(request.model.clone()),
+        );
 
         // Extract system messages and convert the rest.
         let mut system_parts: Vec<serde_json::Value> = Vec::new();
@@ -105,7 +108,10 @@ impl AnthropicProvider {
 
         // Max tokens - required by Anthropic.
         let max_tokens = request.max_tokens.unwrap_or(8192);
-        body.insert("max_tokens".into(), serde_json::Value::Number(max_tokens.into()));
+        body.insert(
+            "max_tokens".into(),
+            serde_json::Value::Number(max_tokens.into()),
+        );
 
         if let Some(temp) = request.temperature {
             body.insert(
@@ -210,10 +216,10 @@ impl AnthropicProvider {
         headers.insert("content-type", "application/json".parse().unwrap());
 
         // Add beta header for extended thinking.
-        if request.provider_options.contains_key("thinking") {
-            if let Ok(val) = "interleaved-thinking-2025-05-14".parse() {
-                headers.insert("anthropic-beta", val);
-            }
+        if request.provider_options.contains_key("thinking")
+            && let Ok(val) = "interleaved-thinking-2025-05-14".parse()
+        {
+            headers.insert("anthropic-beta", val);
         }
 
         headers
@@ -282,11 +288,7 @@ impl LlmProvider for AnthropicProvider {
         "Anthropic"
     }
 
-    async fn chat(
-        &self,
-        request: ChatRequest,
-        cancel: CancellationToken,
-    ) -> Result<ChatResponse> {
+    async fn chat(&self, request: ChatRequest, cancel: CancellationToken) -> Result<ChatResponse> {
         let body = self.build_request_body(&request, false)?;
         let headers = self.build_headers(&request);
         let url = format!("{}/v1/messages", self.base_url);
@@ -373,8 +375,8 @@ enum ContentBlockState {
     Text,
     ToolUse {
         index: usize,
-        id: String,
-        name: String,
+        _id: String,
+        _name: String,
     },
     Thinking,
 }
@@ -416,8 +418,8 @@ impl AnthropicStreamAdapter {
                                 index,
                                 ContentBlockState::ToolUse {
                                     index: tool_index,
-                                    id: id.clone(),
-                                    name: name.clone(),
+                                    _id: id.clone(),
+                                    _name: name.clone(),
                                 },
                             );
                             output.push(Ok(StreamEvent::ToolCallStart {
@@ -427,7 +429,8 @@ impl AnthropicStreamAdapter {
                             }));
                         }
                         Some("thinking") => {
-                            self.current_blocks.insert(index, ContentBlockState::Thinking);
+                            self.current_blocks
+                                .insert(index, ContentBlockState::Thinking);
                         }
                         _ => {}
                     }
@@ -445,7 +448,12 @@ impl AnthropicStreamAdapter {
                                     output.push(Ok(StreamEvent::TextDelta(text.to_string())));
                                 }
                             }
-                            (Some("input_json_delta"), ContentBlockState::ToolUse { index: tool_idx, .. }) => {
+                            (
+                                Some("input_json_delta"),
+                                ContentBlockState::ToolUse {
+                                    index: tool_idx, ..
+                                },
+                            ) => {
                                 if let Some(json_delta) = delta["partial_json"].as_str() {
                                     output.push(Ok(StreamEvent::ToolCallDelta {
                                         index: *tool_idx,
@@ -455,7 +463,9 @@ impl AnthropicStreamAdapter {
                             }
                             (Some("thinking_delta"), ContentBlockState::Thinking) => {
                                 if let Some(thinking) = delta["thinking"].as_str() {
-                                    output.push(Ok(StreamEvent::ReasoningDelta(thinking.to_string())));
+                                    output.push(Ok(StreamEvent::ReasoningDelta(
+                                        thinking.to_string(),
+                                    )));
                                 }
                             }
                             _ => {}
@@ -466,8 +476,9 @@ impl AnthropicStreamAdapter {
             "content_block_stop" => {
                 if let Ok(data) = parse_sse_json::<serde_json::Value>(&sse_event.data) {
                     let index = data["index"].as_u64().unwrap_or(0);
-                    if let Some(ContentBlockState::ToolUse { index: tool_idx, .. }) =
-                        self.current_blocks.get(&index)
+                    if let Some(ContentBlockState::ToolUse {
+                        index: tool_idx, ..
+                    }) = self.current_blocks.get(&index)
                     {
                         output.push(Ok(StreamEvent::ToolCallEnd { index: *tool_idx }));
                     }
@@ -554,6 +565,7 @@ impl Stream for AnthropicStreamAdapter {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::provider::{ChatMessage, ToolDefinition};
 
     #[test]
     fn test_build_request_body_basic() {
@@ -699,11 +711,15 @@ mod tests {
         // Tool use delta.
         let events = adapter.process_event(sse::SseEvent {
             event: Some("content_block_delta".into()),
-            data: r#"{"index":1,"delta":{"type":"input_json_delta","partial_json":"{\"path\":"}}"#.into(),
+            data: r#"{"index":1,"delta":{"type":"input_json_delta","partial_json":"{\"path\":"}}"#
+                .into(),
         });
         assert_eq!(events.len(), 1);
         match &events[0] {
-            Ok(StreamEvent::ToolCallDelta { index, arguments_delta }) => {
+            Ok(StreamEvent::ToolCallDelta {
+                index,
+                arguments_delta,
+            }) => {
                 assert_eq!(*index, 0);
                 assert_eq!(arguments_delta, "{\"path\":");
             }
@@ -738,7 +754,10 @@ mod tests {
 
         assert_eq!(events.len(), 1);
         match &events[0] {
-            Ok(StreamEvent::StepFinish { finish_reason, usage }) => {
+            Ok(StreamEvent::StepFinish {
+                finish_reason,
+                usage,
+            }) => {
                 assert_eq!(*finish_reason, FinishReason::Stop);
                 assert_eq!(usage.input_tokens, 25);
                 assert_eq!(usage.output_tokens, 42);
@@ -762,9 +781,10 @@ mod tests {
     fn test_headers_with_thinking() {
         let provider = AnthropicProvider::new("sk-test-key");
         let mut request = ChatRequest::new("claude-3-5-sonnet-20241022", vec![]);
-        request
-            .provider_options
-            .insert("thinking".into(), serde_json::json!({"type": "enabled", "budget_tokens": 10000}));
+        request.provider_options.insert(
+            "thinking".into(),
+            serde_json::json!({"type": "enabled", "budget_tokens": 10000}),
+        );
 
         let headers = provider.build_headers(&request);
         assert!(headers.get("anthropic-beta").is_some());

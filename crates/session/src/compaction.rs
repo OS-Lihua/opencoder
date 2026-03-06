@@ -33,10 +33,7 @@ pub fn is_overflow(
 /// Prune large tool outputs from older messages to free up context.
 ///
 /// Returns the estimated number of tokens saved.
-pub fn prune(
-    messages: &[MessageWithParts],
-    session_svc: &SessionService,
-) -> Result<u64> {
+pub fn prune(messages: &[MessageWithParts], session_svc: &SessionService) -> Result<u64> {
     const PRUNE_THRESHOLD_CHARS: usize = 40_000;
     let mut saved = 0u64;
 
@@ -56,34 +53,32 @@ pub fn prune(
     // Prune tool outputs in older messages
     for msg in messages.iter().take(cutoff_idx) {
         for part_with_id in &msg.parts {
-            if let Part::Tool(tool_part) = &part_with_id.part {
-                if let crate::message::ToolState::Completed { output, .. } = &tool_part.state {
-                    if output.len() > PRUNE_THRESHOLD_CHARS {
-                        // Mark as compacted by replacing with truncated output
-                        let truncated = format!(
-                            "[Output compacted: was {} chars. Use tool again if needed.]",
-                            output.len()
-                        );
-                        let chars_saved = output.len() - truncated.len();
-                        saved += (chars_saved / 4) as u64; // rough char-to-token ratio
+            if let Part::Tool(tool_part) = &part_with_id.part
+                && let crate::message::ToolState::Completed { output, .. } = &tool_part.state
+                && output.len() > PRUNE_THRESHOLD_CHARS
+            {
+                // Mark as compacted by replacing with truncated output
+                let truncated = format!(
+                    "[Output compacted: was {} chars. Use tool again if needed.]",
+                    output.len()
+                );
+                let chars_saved = output.len() - truncated.len();
+                saved += (chars_saved / 4) as u64; // rough char-to-token ratio
 
-                        let mut compacted_part = tool_part.clone();
-                        if let crate::message::ToolState::Completed { ref mut output, .. } = compacted_part.state {
-                            *output = truncated;
-                        }
-
-                        session_svc.update_part(
-                            &part_with_id.id,
-                            &Part::Tool(compacted_part),
-                        )?;
-
-                        debug!(
-                            part_id = %part_with_id.id,
-                            chars_saved,
-                            "pruned large tool output"
-                        );
-                    }
+                let mut compacted_part = tool_part.clone();
+                if let crate::message::ToolState::Completed { ref mut output, .. } =
+                    compacted_part.state
+                {
+                    *output = truncated;
                 }
+
+                session_svc.update_part(&part_with_id.id, &Part::Tool(compacted_part))?;
+
+                debug!(
+                    part_id = %part_with_id.id,
+                    chars_saved,
+                    "pruned large tool output"
+                );
             }
         }
     }
@@ -143,10 +138,16 @@ pub async fn process(
         Conversation:\n{conversation_text}"
     );
 
-    let request = ChatRequest::new(model.to_string(), vec![
-        ChatMessage::text(Role::System, "You are a conversation summarizer. Produce a concise summary."),
-        ChatMessage::text(Role::User, &summary_prompt),
-    ]);
+    let request = ChatRequest::new(
+        model.to_string(),
+        vec![
+            ChatMessage::text(
+                Role::System,
+                "You are a conversation summarizer. Produce a concise summary.",
+            ),
+            ChatMessage::text(Role::User, &summary_prompt),
+        ],
+    );
 
     let cancel = tokio_util::sync::CancellationToken::new();
     let response = provider.chat(request, cancel).await?;
@@ -157,7 +158,8 @@ pub async fn process(
     }
 
     // Find the last assistant message to attach the compaction part
-    let last_msg = messages.last()
+    let last_msg = messages
+        .last()
         .ok_or_else(|| anyhow::anyhow!("no messages to compact"))?;
 
     session_svc.add_part(

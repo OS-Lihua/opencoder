@@ -3,7 +3,9 @@
 use ratatui::style::{Color, Modifier, Style};
 
 pub fn title_style() -> Style {
-    Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)
+    Style::default()
+        .fg(Color::Cyan)
+        .add_modifier(Modifier::BOLD)
 }
 
 pub fn selected_style() -> Style {
@@ -19,7 +21,9 @@ pub fn dim_style() -> Style {
 }
 
 pub fn user_style() -> Style {
-    Style::default().fg(Color::Blue).add_modifier(Modifier::BOLD)
+    Style::default()
+        .fg(Color::Blue)
+        .add_modifier(Modifier::BOLD)
 }
 
 pub fn assistant_style() -> Style {
@@ -42,11 +46,11 @@ pub fn tool_error_style() -> Style {
     Style::default().fg(Color::Red)
 }
 
-pub fn status_style() -> Style {
+pub fn _status_style() -> Style {
     Style::default().fg(Color::Yellow)
 }
 
-pub fn error_style() -> Style {
+pub fn _error_style() -> Style {
     Style::default().fg(Color::Red).add_modifier(Modifier::BOLD)
 }
 

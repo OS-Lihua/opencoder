@@ -5,13 +5,13 @@
 
 use std::collections::HashMap;
 use std::process::Stdio;
-use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicU64, Ordering};
 
 use anyhow::{Context, Result};
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::process::{Child, Command};
-use tokio::sync::{mpsc, oneshot, Mutex};
+use tokio::sync::{Mutex, mpsc, oneshot};
 use tracing::debug;
 
 use crate::protocol::{JsonRpcRequest, JsonRpcResponse};
@@ -20,7 +20,11 @@ use crate::protocol::{JsonRpcRequest, JsonRpcResponse};
 #[async_trait::async_trait]
 pub trait Transport: Send + Sync {
     /// Send a request and receive a response.
-    async fn request(&self, method: &str, params: Option<serde_json::Value>) -> Result<serde_json::Value>;
+    async fn request(
+        &self,
+        method: &str,
+        params: Option<serde_json::Value>,
+    ) -> Result<serde_json::Value>;
 
     /// Send a notification (no response expected).
     async fn notify(&self, method: &str, params: Option<serde_json::Value>) -> Result<()>;
@@ -51,7 +55,9 @@ impl StdioTransport {
             .stderr(Stdio::null())
             .kill_on_drop(true);
 
-        let mut child = cmd.spawn().with_context(|| format!("failed to spawn {command}"))?;
+        let mut child = cmd
+            .spawn()
+            .with_context(|| format!("failed to spawn {command}"))?;
 
         let stdin = child.stdin.take().context("no stdin")?;
         let stdout = child.stdout.take().context("no stdout")?;
@@ -110,7 +116,11 @@ impl StdioTransport {
 
 #[async_trait::async_trait]
 impl Transport for StdioTransport {
-    async fn request(&self, method: &str, params: Option<serde_json::Value>) -> Result<serde_json::Value> {
+    async fn request(
+        &self,
+        method: &str,
+        params: Option<serde_json::Value>,
+    ) -> Result<serde_json::Value> {
         let id = self.request_id.fetch_add(1, Ordering::Relaxed);
         let req = JsonRpcRequest::new(id, method, params);
         let msg = serde_json::to_string(&req)? + "\n";
@@ -177,7 +187,11 @@ impl HttpTransport {
 
 #[async_trait::async_trait]
 impl Transport for HttpTransport {
-    async fn request(&self, method: &str, params: Option<serde_json::Value>) -> Result<serde_json::Value> {
+    async fn request(
+        &self,
+        method: &str,
+        params: Option<serde_json::Value>,
+    ) -> Result<serde_json::Value> {
         let id = self.request_id.fetch_add(1, Ordering::Relaxed);
         let req = JsonRpcRequest::new(id, method, params);
 
@@ -187,7 +201,10 @@ impl Transport for HttpTransport {
         }
 
         let resp = builder.send().await.context("MCP HTTP request failed")?;
-        let body: JsonRpcResponse = resp.json().await.context("MCP HTTP response parse failed")?;
+        let body: JsonRpcResponse = resp
+            .json()
+            .await
+            .context("MCP HTTP response parse failed")?;
 
         if let Some(err) = body.error {
             anyhow::bail!("MCP error {}: {}", err.code, err.message);

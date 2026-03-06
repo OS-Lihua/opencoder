@@ -9,8 +9,14 @@ use regex::Regex;
 /// Parsed API error types.
 #[derive(Debug, Clone)]
 pub enum ParsedError {
-    ContextOverflow { message: String },
-    ApiError { message: String, status: Option<u16>, retryable: bool },
+    ContextOverflow {
+        message: String,
+    },
+    ApiError {
+        message: String,
+        status: Option<u16>,
+        retryable: bool,
+    },
 }
 
 /// Context overflow detection patterns (from all providers).

@@ -32,10 +32,7 @@ pub fn run(db: &Database) -> anyhow::Result<()> {
             if !applied.contains(&name.to_string()) {
                 info!("applying migration: {name}");
                 conn.execute_batch(sql)?;
-                conn.execute(
-                    "INSERT INTO _migrations (name) VALUES (?1)",
-                    params![name],
-                )?;
+                conn.execute("INSERT INTO _migrations (name) VALUES (?1)", params![name])?;
             }
         }
 
@@ -44,6 +41,5 @@ pub fn run(db: &Database) -> anyhow::Result<()> {
 }
 
 /// Embedded migrations in order. Each is (name, SQL).
-const MIGRATIONS: &[(&str, &str)] = &[
-    ("0001_initial", include_str!("migrations/0001_initial.sql")),
-];
+const MIGRATIONS: &[(&str, &str)] =
+    &[("0001_initial", include_str!("migrations/0001_initial.sql"))];

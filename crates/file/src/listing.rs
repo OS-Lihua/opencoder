@@ -44,10 +44,7 @@ pub fn list_files(dir: &Path, max_results: usize) -> anyhow::Result<Vec<FileEntr
         }
 
         // Skip .git directory
-        if path
-            .components()
-            .any(|c| c.as_os_str() == ".git")
-        {
+        if path.components().any(|c| c.as_os_str() == ".git") {
             continue;
         }
 

@@ -35,8 +35,8 @@ pub struct PtyInfo {
 pub struct PtySession {
     info: PtyInfo,
     child: Option<Child>,
-    buffer: VecDeque<u8>,
-    output_tx: mpsc::Sender<Vec<u8>>,
+    _buffer: VecDeque<u8>,
+    _output_tx: mpsc::Sender<Vec<u8>>,
     output_rx: Option<mpsc::Receiver<Vec<u8>>>,
     stdin_tx: Option<mpsc::Sender<Vec<u8>>>,
 }
@@ -136,8 +136,8 @@ impl PtySession {
                 running: true,
             },
             child: Some(child),
-            buffer: VecDeque::with_capacity(MAX_BUFFER_SIZE),
-            output_tx,
+            _buffer: VecDeque::with_capacity(MAX_BUFFER_SIZE),
+            _output_tx: output_tx,
             output_rx: Some(output_rx),
             stdin_tx: Some(stdin_tx),
         })

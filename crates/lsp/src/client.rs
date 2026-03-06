@@ -83,12 +83,7 @@ pub struct LspClient {
 
 impl LspClient {
     /// Start a language server process and initialize the LSP connection.
-    async fn start(
-        language: &str,
-        command: &str,
-        args: &[&str],
-        root_dir: &Path,
-    ) -> Result<Self> {
+    async fn start(language: &str, command: &str, args: &[&str], root_dir: &Path) -> Result<Self> {
         let mut child = Command::new(command)
             .args(args)
             .stdin(Stdio::piped())
@@ -141,19 +136,18 @@ impl LspClient {
                 }
 
                 let body_str = String::from_utf8_lossy(&body);
-                if let Ok(msg) = serde_json::from_str::<serde_json::Value>(&body_str) {
-                    if let Some(id) = msg.get("id").and_then(|v| v.as_u64()) {
-                        if msg.get("method").is_none() {
-                            // This is a response
-                            let result = msg
-                                .get("result")
-                                .cloned()
-                                .unwrap_or(serde_json::Value::Null);
-                            let mut pending = pending_clone.lock().await;
-                            if let Some(tx) = pending.remove(&id) {
-                                let _ = tx.send(result);
-                            }
-                        }
+                if let Ok(msg) = serde_json::from_str::<serde_json::Value>(&body_str)
+                    && let Some(id) = msg.get("id").and_then(|v| v.as_u64())
+                    && msg.get("method").is_none()
+                {
+                    // This is a response
+                    let result = msg
+                        .get("result")
+                        .cloned()
+                        .unwrap_or(serde_json::Value::Null);
+                    let mut pending = pending_clone.lock().await;
+                    if let Some(tx) = pending.remove(&id) {
+                        let _ = tx.send(result);
                     }
                 }
             }
@@ -249,7 +243,12 @@ impl LspClient {
     }
 
     /// Get definition for a position in a file.
-    pub async fn definition(&self, uri: &str, line: u32, character: u32) -> Result<serde_json::Value> {
+    pub async fn definition(
+        &self,
+        uri: &str,
+        line: u32,
+        character: u32,
+    ) -> Result<serde_json::Value> {
         self.request(
             "textDocument/definition",
             serde_json::json!({
@@ -261,7 +260,12 @@ impl LspClient {
     }
 
     /// Get references for a position in a file.
-    pub async fn references(&self, uri: &str, line: u32, character: u32) -> Result<serde_json::Value> {
+    pub async fn references(
+        &self,
+        uri: &str,
+        line: u32,
+        character: u32,
+    ) -> Result<serde_json::Value> {
         self.request(
             "textDocument/references",
             serde_json::json!({

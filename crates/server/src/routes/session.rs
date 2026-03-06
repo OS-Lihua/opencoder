@@ -135,7 +135,11 @@ async fn send_message(
     let session_id = id.clone();
 
     // Determine model
-    let model_str = state.config.model.as_deref().unwrap_or("anthropic/claude-sonnet-4-20250514");
+    let model_str = state
+        .config
+        .model
+        .as_deref()
+        .unwrap_or("anthropic/claude-sonnet-4-20250514");
     let (_provider_id, model_id) = opencoder_provider::init::parse_model_str(model_str);
 
     let cancel = tokio_util::sync::CancellationToken::new();
@@ -166,7 +170,9 @@ async fn send_message(
             &agent_registry,
             tools,
             &bus,
-        ).await {
+        )
+        .await
+        {
             tracing::error!(session_id = %id, error = %e, "agent loop failed");
             bus.publish(opencoder_core::bus::Event::SessionError {
                 session_id: id.parse().unwrap_or_else(|_| {
@@ -223,10 +229,6 @@ impl axum::response::IntoResponse for AppError {
         let body = serde_json::json!({
             "error": self.0.to_string(),
         });
-        (
-            axum::http::StatusCode::INTERNAL_SERVER_ERROR,
-            Json(body),
-        )
-            .into_response()
+        (axum::http::StatusCode::INTERNAL_SERVER_ERROR, Json(body)).into_response()
     }
 }

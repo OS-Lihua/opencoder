@@ -52,12 +52,15 @@ impl CommandRegistry {
 
         if let Some(cmds) = config_commands {
             for (name, cfg) in cmds {
-                reg.commands.insert(name.clone(), Command {
-                    name: name.clone(),
-                    description: cfg.description.clone().unwrap_or_default(),
-                    template: cfg.template.clone(),
-                    agent: cfg.agent.clone(),
-                });
+                reg.commands.insert(
+                    name.clone(),
+                    Command {
+                        name: name.clone(),
+                        description: cfg.description.clone().unwrap_or_default(),
+                        template: cfg.template.clone(),
+                        agent: cfg.agent.clone(),
+                    },
+                );
             }
         }
 
@@ -77,7 +80,8 @@ impl CommandRegistry {
     /// Expand a command template with arguments.
     pub fn expand(&self, name: &str, arguments: &str) -> Option<String> {
         let cmd = self.commands.get(name)?;
-        let expanded = cmd.template
+        let expanded = cmd
+            .template
             .replace("$ARGUMENTS", arguments)
             .replace("$1", arguments);
         Some(expanded)

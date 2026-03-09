@@ -195,6 +195,7 @@ async fn main() {
                 cancel,
                 project_dir: dir.clone(),
                 config: config.clone(),
+                db: db.clone(),
             };
 
             // Start streaming output in background
@@ -204,12 +205,14 @@ async fn main() {
                 output::print_stream(&bus_clone, &session_id_clone).await;
             });
 
+            let registry = Arc::new(registry);
+
             // Run agent loop
             if let Err(e) = agent_loop::run(
                 loop_config,
                 &prompt,
                 session_svc.clone(),
-                &registry,
+                registry,
                 tools.all().clone(),
                 &bus,
             )

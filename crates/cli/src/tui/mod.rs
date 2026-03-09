@@ -97,6 +97,9 @@ async fn run_loop(
                 ActiveOverlay::Question(state) => {
                     components::question_dialog::render(f, state);
                 }
+                ActiveOverlay::AgentSelector(state) => {
+                    components::agent_selector::render(f, state);
+                }
             }
         })?;
 
@@ -111,7 +114,13 @@ async fn run_loop(
                 continue;
             }
 
-            let action = key::handle_key(key, &app.screen, &app.input_mode, &app.overlay);
+            let action = key::handle_key(
+                key,
+                &app.screen,
+                &app.input_mode,
+                &app.overlay,
+                app.searching,
+            );
             if app.handle_action(action).await? {
                 break; // quit
             }

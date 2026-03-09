@@ -4,6 +4,7 @@
 //! Handles the streaming loop: LLM events → part creation → tool execution → loop.
 
 use std::collections::HashMap;
+use std::path::PathBuf;
 use std::sync::Arc;
 
 use anyhow::Result;
@@ -12,8 +13,9 @@ use futures::StreamExt;
 use tracing::{debug, warn};
 
 use opencoder_core::bus::Bus;
+use opencoder_core::storage::Database;
 use opencoder_provider::provider::{FinishReason, StreamEvent};
-use opencoder_tool::tool::{Tool, ToolContext, ToolOutput};
+use opencoder_tool::tool::{AgentRunner, Tool, ToolContext, ToolOutput};
 
 use crate::message::*;
 use crate::session::SessionService;
@@ -31,6 +33,9 @@ pub struct StreamProcessor {
     session_svc: Arc<SessionService>,
     tools: HashMap<String, Arc<dyn Tool>>,
     bus: Option<Bus>,
+    db: Option<Arc<Database>>,
+    project_dir: Option<PathBuf>,
+    agent_runner: Option<Arc<dyn AgentRunner>>,
 }
 
 impl StreamProcessor {
@@ -38,11 +43,17 @@ impl StreamProcessor {
         session_svc: Arc<SessionService>,
         tools: HashMap<String, Arc<dyn Tool>>,
         bus: Option<Bus>,
+        db: Option<Arc<Database>>,
+        project_dir: Option<PathBuf>,
+        agent_runner: Option<Arc<dyn AgentRunner>>,
     ) -> Self {
         Self {
             session_svc,
             tools,
             bus,
+            db,
+            project_dir,
+            agent_runner,
         }
     }
 
@@ -284,9 +295,9 @@ impl StreamProcessor {
                     call_id: info.call_id.clone(),
                     cancel: cancel.clone(),
                     bus: self.bus.clone().map(Arc::new),
-                    db: None,
-                    project_dir: None,
-                    agent_runner: None,
+                    db: self.db.clone(),
+                    project_dir: self.project_dir.clone(),
+                    agent_runner: self.agent_runner.clone(),
                 };
                 tool.execute(input.clone(), &ctx).await
             } else {

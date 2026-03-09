@@ -2,19 +2,25 @@
 
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
-use super::app::{Action, ActiveOverlay, InputMode, QuestionDialogState, Screen};
+use super::app::{
+    Action, ActiveOverlay, AgentSelectorState, InputMode, QuestionDialogState, Screen,
+};
 
 pub fn handle_key(
     key: KeyEvent,
     screen: &Screen,
     input_mode: &InputMode,
     overlay: &ActiveOverlay,
+    searching: bool,
 ) -> Action {
     // When an overlay is active, route keys to it first
     match overlay {
         ActiveOverlay::None => {}
-        ActiveOverlay::Permission(state) => return handle_permission_overlay_key(key, state.selected),
+        ActiveOverlay::Permission(state) => {
+            return handle_permission_overlay_key(key, state.selected);
+        }
         ActiveOverlay::Question(state) => return handle_question_overlay_key(key, state),
+        ActiveOverlay::AgentSelector(state) => return handle_agent_selector_key(key, state),
     }
 
     // Global: Ctrl+C always quits or cancels
@@ -26,7 +32,7 @@ pub fn handle_key(
     }
 
     match screen {
-        Screen::Home => handle_home_key(key),
+        Screen::Home => handle_home_key(key, searching),
         Screen::Session => match input_mode {
             InputMode::Normal => handle_session_normal_key(key),
             InputMode::Editing => handle_session_editing_key(key),
@@ -36,12 +42,8 @@ pub fn handle_key(
 
 fn handle_permission_overlay_key(key: KeyEvent, selected: usize) -> Action {
     match key.code {
-        KeyCode::Up | KeyCode::Char('k') => {
-            Action::OverlaySelect(selected.saturating_sub(1))
-        }
-        KeyCode::Down | KeyCode::Char('j') => {
-            Action::OverlaySelect((selected + 1).min(2))
-        }
+        KeyCode::Up | KeyCode::Char('k') => Action::OverlaySelect(selected.saturating_sub(1)),
+        KeyCode::Down | KeyCode::Char('j') => Action::OverlaySelect((selected + 1).min(2)),
         KeyCode::Enter => Action::OverlayConfirm,
         KeyCode::Esc => Action::OverlayDismiss,
         // Shortcuts: y=allow, n=deny, a=always
@@ -70,9 +72,9 @@ fn handle_question_overlay_key(key: KeyEvent, state: &QuestionDialogState) -> Ac
             KeyCode::Up | KeyCode::Char('k') => {
                 Action::OverlaySelect(state.selected_option.saturating_sub(1))
             }
-            KeyCode::Down | KeyCode::Char('j') => {
-                Action::OverlaySelect((state.selected_option + 1).min(state.options.len().saturating_sub(1)))
-            }
+            KeyCode::Down | KeyCode::Char('j') => Action::OverlaySelect(
+                (state.selected_option + 1).min(state.options.len().saturating_sub(1)),
+            ),
             KeyCode::Enter => Action::OverlayConfirm,
             KeyCode::Esc => Action::OverlayDismiss,
             _ => Action::Noop,
@@ -80,7 +82,18 @@ fn handle_question_overlay_key(key: KeyEvent, state: &QuestionDialogState) -> Ac
     }
 }
 
-fn handle_home_key(key: KeyEvent) -> Action {
+fn handle_home_key(key: KeyEvent, searching: bool) -> Action {
+    if searching {
+        return match key.code {
+            KeyCode::Esc => Action::StartSearch, // toggle off
+            KeyCode::Enter => Action::EnterSession,
+            KeyCode::Backspace => Action::DeleteChar,
+            KeyCode::Char(c) => Action::InsertChar(c),
+            KeyCode::Up => Action::MoveUp,
+            KeyCode::Down => Action::MoveDown,
+            _ => Action::Noop,
+        };
+    }
     match key.code {
         KeyCode::Char('q') => Action::Quit,
         KeyCode::Char('n') => Action::NewSession,
@@ -121,6 +134,7 @@ fn handle_session_editing_key(key: KeyEvent) -> Action {
         KeyCode::Char(c) => {
             if key.modifiers.contains(KeyModifiers::CONTROL) {
                 match c {
+                    'a' => Action::OpenAgentSelector,
                     'j' => Action::InsertNewline,
                     'l' => Action::Noop, // clear screen
                     _ => Action::Noop,
@@ -131,6 +145,18 @@ fn handle_session_editing_key(key: KeyEvent) -> Action {
         }
         KeyCode::PageUp => Action::ScrollUp,
         KeyCode::PageDown => Action::ScrollDown,
+        _ => Action::Noop,
+    }
+}
+
+fn handle_agent_selector_key(key: KeyEvent, state: &AgentSelectorState) -> Action {
+    match key.code {
+        KeyCode::Up | KeyCode::Char('k') => Action::OverlaySelect(state.selected.saturating_sub(1)),
+        KeyCode::Down | KeyCode::Char('j') => {
+            Action::OverlaySelect((state.selected + 1).min(state.agents.len().saturating_sub(1)))
+        }
+        KeyCode::Enter => Action::OverlayConfirm,
+        KeyCode::Esc => Action::OverlayDismiss,
         _ => Action::Noop,
     }
 }

@@ -153,6 +153,7 @@ async fn send_message(
         cancel,
         project_dir: state.project_dir.clone(),
         config: state.config.clone(),
+        db: state.db.clone(),
     };
 
     let session_svc = state.session_svc.clone();
@@ -167,7 +168,7 @@ async fn send_message(
             loop_config,
             &content,
             session_svc,
-            &agent_registry,
+            agent_registry,
             tools,
             &bus,
         )

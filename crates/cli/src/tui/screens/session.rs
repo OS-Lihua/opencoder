@@ -3,6 +3,8 @@
 use ratatui::prelude::*;
 use ratatui::widgets::*;
 
+use opencoder_session::message::Part;
+
 use crate::tui::app::App;
 use crate::tui::components::message_list;
 use crate::tui::theme;
@@ -72,12 +74,58 @@ pub fn render(f: &mut Frame, app: &App) {
         f.set_cursor_position((input_x.min(chunks[2].right() - 2), input_y));
     }
 
-    // Status bar
+    // Status bar with token usage
+    let token_info = compute_token_usage(&app.messages);
     let status_text = if app.agent_running {
-        format!(" {} ", app.status_text)
+        if token_info.is_empty() {
+            format!(" {} ", app.status_text)
+        } else {
+            format!(" {} | {} ", app.status_text, token_info)
+        }
     } else {
-        " Ready | Ctrl+C=Cancel | Esc=Home ".to_string()
+        let agent_part = format!("[{}]", app.current_agent);
+        if token_info.is_empty() {
+            format!(" {agent_part} Ready | Ctrl+A=Agent | Ctrl+C=Cancel | Esc=Home ")
+        } else {
+            format!(" {agent_part} Ready | {token_info} | Ctrl+A=Agent | Ctrl+C=Cancel | Esc=Home ")
+        }
     };
     let status = Paragraph::new(status_text).style(theme::dim_style());
     f.render_widget(status, chunks[3]);
+}
+
+/// Compute total token usage from StepFinish parts.
+fn compute_token_usage(messages: &[opencoder_session::MessageWithParts]) -> String {
+    let mut total_input: u64 = 0;
+    let mut total_output: u64 = 0;
+
+    for msg in messages {
+        for p in &msg.parts {
+            if let Part::StepFinish(sf) = &p.part {
+                total_input += sf.usage.input_tokens;
+                total_output += sf.usage.output_tokens;
+            }
+        }
+    }
+
+    if total_input == 0 && total_output == 0 {
+        return String::new();
+    }
+
+    format!(
+        "{} in / {} out",
+        format_tokens(total_input),
+        format_tokens(total_output)
+    )
+}
+
+/// Format a token count as a human-readable string (e.g., "1.2k", "15.3k").
+fn format_tokens(n: u64) -> String {
+    if n < 1000 {
+        format!("{n}")
+    } else if n < 100_000 {
+        format!("{:.1}k", n as f64 / 1000.0)
+    } else {
+        format!("{:.0}k", n as f64 / 1000.0)
+    }
 }

@@ -22,7 +22,7 @@ pub fn render(f: &mut Frame, state: &PermissionDialogState) {
         .constraints([
             Constraint::Length(1), // tool name
             Constraint::Length(1), // blank
-            Constraint::Min(2),   // description
+            Constraint::Min(2),    // description
             Constraint::Length(1), // blank
             Constraint::Length(3), // options
             Constraint::Length(1), // hint
@@ -43,7 +43,9 @@ pub fn render(f: &mut Frame, state: &PermissionDialogState) {
         state.description.clone()
     };
     f.render_widget(
-        Paragraph::new(desc_text).style(theme::normal_style()).wrap(ratatui::widgets::Wrap { trim: false }),
+        Paragraph::new(desc_text)
+            .style(theme::normal_style())
+            .wrap(ratatui::widgets::Wrap { trim: false }),
         chunks[2],
     );
 
@@ -72,8 +74,5 @@ pub fn render(f: &mut Frame, state: &PermissionDialogState) {
         "↑↓ select  Enter confirm  Esc deny  y allow  n deny",
         theme::dim_style(),
     )]);
-    f.render_widget(
-        Paragraph::new(hint).alignment(Alignment::Center),
-        chunks[5],
-    );
+    f.render_widget(Paragraph::new(hint).alignment(Alignment::Center), chunks[5]);
 }

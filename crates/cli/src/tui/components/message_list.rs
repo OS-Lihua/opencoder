@@ -53,40 +53,67 @@ fn render_part(part: &Part, lines: &mut Vec<Line<'static>>) {
             }
         }
         Part::Tool(tool) => {
-            let (icon, style, detail) = match &tool.state {
+            match &tool.state {
                 ToolState::Pending { .. } => {
-                    ("◌", theme::tool_pending_style(), "pending...".to_string())
+                    lines.push(Line::from(vec![
+                        Span::styled("  ◌ ", theme::tool_pending_style()),
+                        Span::styled(tool.tool.clone(), theme::tool_pending_style()),
+                        Span::styled(": ", theme::dim_style()),
+                        Span::styled("pending...", theme::tool_pending_style()),
+                    ]));
                 }
                 ToolState::Running { title, .. } => {
                     let t = title.as_deref().unwrap_or("running...");
-                    ("⟳", theme::tool_running_style(), t.to_string())
+                    lines.push(Line::from(vec![
+                        Span::styled("  ⟳ ", theme::tool_running_style()),
+                        Span::styled(tool.tool.clone(), theme::tool_running_style()),
+                        Span::styled(": ", theme::dim_style()),
+                        Span::styled(t.to_string(), theme::tool_running_style()),
+                    ]));
                 }
-                ToolState::Completed { title, .. } => {
-                    ("✓", theme::tool_completed_style(), title.clone())
+                ToolState::Completed {
+                    title,
+                    output,
+                    time_start,
+                    time_end,
+                    ..
+                } => {
+                    let duration = format_duration(*time_end - *time_start);
+                    lines.push(Line::from(vec![
+                        Span::styled("  ✓ ", theme::tool_completed_style()),
+                        Span::styled(tool.tool.clone(), theme::tool_completed_style()),
+                        Span::styled(format!(" ({duration})"), theme::dim_style()),
+                        Span::styled(": ", theme::dim_style()),
+                        Span::styled(title.clone(), theme::tool_completed_style()),
+                    ]));
+                    // Show output preview (up to 3 lines)
+                    let preview = truncate_output(output, 3);
+                    if !preview.is_empty() {
+                        for line in preview.lines() {
+                            lines.push(Line::from(Span::styled(
+                                format!("    {line}"),
+                                theme::dim_style(),
+                            )));
+                        }
+                    }
                 }
                 ToolState::Error { error, .. } => {
-                    let short = if error.len() > 80 {
-                        format!("{}...", &error[..77])
-                    } else {
-                        error.clone()
-                    };
-                    ("✗", theme::tool_error_style(), short)
+                    lines.push(Line::from(vec![
+                        Span::styled("  ✗ ", theme::tool_error_style()),
+                        Span::styled(tool.tool.clone(), theme::tool_error_style()),
+                        Span::styled(": ", theme::dim_style()),
+                        Span::styled(error.clone(), theme::tool_error_style()),
+                    ]));
                 }
-            };
-
-            lines.push(Line::from(vec![
-                Span::styled(format!("  {icon} "), style),
-                Span::styled(tool.tool.clone(), style),
-                Span::styled(": ", theme::dim_style()),
-                Span::styled(detail, style),
-            ]));
+            }
         }
         Part::Reasoning(reasoning) => {
             if reasoning.content.is_empty() {
                 return;
             }
+            let words = reasoning.content.split_whitespace().count();
             lines.push(Line::from(Span::styled(
-                "  [thinking...]".to_string(),
+                format!("  [thinking... {words} words]"),
                 theme::dim_style(),
             )));
         }
@@ -100,5 +127,31 @@ fn render_part(part: &Part, lines: &mut Vec<Line<'static>>) {
             )));
         }
         _ => {}
+    }
+}
+
+/// Truncate output to the first N lines, showing a "... (X more lines)" indicator.
+fn truncate_output(output: &str, max_lines: usize) -> String {
+    let output = output.trim();
+    if output.is_empty() {
+        return String::new();
+    }
+    let all_lines: Vec<&str> = output.lines().collect();
+    if all_lines.len() <= max_lines {
+        output.to_string()
+    } else {
+        let shown: Vec<&str> = all_lines[..max_lines].to_vec();
+        let remaining = all_lines.len() - max_lines;
+        format!("{}\n... ({remaining} more lines)", shown.join("\n"))
+    }
+}
+
+/// Format a duration in milliseconds as a human-readable string.
+fn format_duration(ms: i64) -> String {
+    if ms < 1000 {
+        format!("{ms}ms")
+    } else {
+        let secs = ms as f64 / 1000.0;
+        format!("{secs:.1}s")
     }
 }

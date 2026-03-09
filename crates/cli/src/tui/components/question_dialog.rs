@@ -20,7 +20,7 @@ pub fn render(f: &mut Frame, state: &QuestionDialogState) {
         let chunks = Layout::default()
             .direction(Direction::Vertical)
             .constraints([
-                Constraint::Min(2),   // question text
+                Constraint::Min(2),    // question text
                 Constraint::Length(1), // blank
                 Constraint::Length(3), // input area
                 Constraint::Length(1), // hint
@@ -63,9 +63,9 @@ pub fn render(f: &mut Frame, state: &QuestionDialogState) {
         let chunks = Layout::default()
             .direction(Direction::Vertical)
             .constraints([
-                Constraint::Min(2),   // question text
+                Constraint::Min(2),    // question text
                 Constraint::Length(1), // blank
-                Constraint::Min(1),   // options list
+                Constraint::Min(1),    // options list
                 Constraint::Length(1), // hint
             ])
             .split(inner);

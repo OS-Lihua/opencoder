@@ -36,6 +36,13 @@ pub enum ActiveOverlay {
     None,
     Permission(PermissionDialogState),
     Question(QuestionDialogState),
+    AgentSelector(AgentSelectorState),
+}
+
+/// State for the agent selector overlay.
+pub struct AgentSelectorState {
+    pub agents: Vec<(String, String)>, // (name, description)
+    pub selected: usize,
 }
 
 /// State for the permission dialog overlay.
@@ -75,6 +82,7 @@ pub enum Action {
     DeleteChar,
     InsertNewline,
     StartSearch,
+    OpenAgentSelector,
     // Overlay actions
     OverlaySelect(usize),
     OverlayConfirm,
@@ -98,6 +106,7 @@ pub struct App {
     pub agent_running: bool,
     pub search_query: String,
     pub searching: bool,
+    pub current_agent: String,
 
     // Overlay
     pub overlay: ActiveOverlay,
@@ -139,6 +148,7 @@ impl App {
             agent_running: false,
             search_query: String::new(),
             searching: false,
+            current_agent: "build".to_string(),
             overlay: ActiveOverlay::None,
             db,
             bus,
@@ -221,10 +231,18 @@ impl App {
                 self.load_sessions()?;
             }
             Action::InsertChar(c) => {
-                self.input.push(c);
+                if self.screen == Screen::Home && self.searching {
+                    self.search_query.push(c);
+                } else {
+                    self.input.push(c);
+                }
             }
             Action::DeleteChar => {
-                self.input.pop();
+                if self.screen == Screen::Home && self.searching {
+                    self.search_query.pop();
+                } else {
+                    self.input.pop();
+                }
             }
             Action::InsertNewline => {
                 self.input.push('\n');
@@ -247,6 +265,22 @@ impl App {
                     self.search_query.clear();
                 }
             }
+            Action::OpenAgentSelector => {
+                if !self.agent_running {
+                    let agents: Vec<(String, String)> = self
+                        .agent_registry
+                        .list()
+                        .iter()
+                        .map(|a| (a.name.clone(), a.description.clone()))
+                        .collect();
+                    let selected = agents
+                        .iter()
+                        .position(|(name, _)| name == &self.current_agent)
+                        .unwrap_or(0);
+                    self.overlay =
+                        ActiveOverlay::AgentSelector(AgentSelectorState { agents, selected });
+                }
+            }
             Action::OverlaySelect(idx) => match &mut self.overlay {
                 ActiveOverlay::Permission(state) => {
                     if idx < 3 {
@@ -258,60 +292,80 @@ impl App {
                         state.selected_option = idx;
                     }
                 }
-                ActiveOverlay::None => {}
-            },
-            Action::OverlayConfirm => match std::mem::replace(&mut self.overlay, ActiveOverlay::None) {
-                ActiveOverlay::Permission(state) => {
-                    let reply = match state.selected {
-                        0 => "allow",
-                        1 => "deny",
-                        2 => "always",
-                        _ => "deny",
-                    };
-                    self.bus.publish(BusEvent::PermissionReplied {
-                        session_id: state
-                            .session_id
-                            .parse()
-                            .unwrap_or_else(|_| opencoder_core::id::Identifier::create(opencoder_core::id::Prefix::Session)),
-                        request_id: state
-                            .request_id
-                            .parse()
-                            .unwrap_or_else(|_| opencoder_core::id::Identifier::create(opencoder_core::id::Prefix::Permission)),
-                        reply: reply.to_string(),
-                    });
-                }
-                ActiveOverlay::Question(state) => {
-                    let reply = if !state.options.is_empty() {
-                        state.options[state.selected_option].clone()
-                    } else {
-                        state.input.clone()
-                    };
-                    self.bus.publish(BusEvent::QuestionReplied {
-                        id: state
-                            .question_id
-                            .parse()
-                            .unwrap_or_else(|_| opencoder_core::id::Identifier::create(opencoder_core::id::Prefix::Question)),
-                        session_id: state
-                            .session_id
-                            .parse()
-                            .unwrap_or_else(|_| opencoder_core::id::Identifier::create(opencoder_core::id::Prefix::Session)),
-                        reply,
-                    });
+                ActiveOverlay::AgentSelector(state) => {
+                    if idx < state.agents.len() {
+                        state.selected = idx;
+                    }
                 }
                 ActiveOverlay::None => {}
             },
+            Action::OverlayConfirm => {
+                match std::mem::replace(&mut self.overlay, ActiveOverlay::None) {
+                    ActiveOverlay::Permission(state) => {
+                        let reply = match state.selected {
+                            0 => "allow",
+                            1 => "deny",
+                            2 => "always",
+                            _ => "deny",
+                        };
+                        self.bus.publish(BusEvent::PermissionReplied {
+                            session_id: state.session_id.parse().unwrap_or_else(|_| {
+                                opencoder_core::id::Identifier::create(
+                                    opencoder_core::id::Prefix::Session,
+                                )
+                            }),
+                            request_id: state.request_id.parse().unwrap_or_else(|_| {
+                                opencoder_core::id::Identifier::create(
+                                    opencoder_core::id::Prefix::Permission,
+                                )
+                            }),
+                            reply: reply.to_string(),
+                        });
+                    }
+                    ActiveOverlay::Question(state) => {
+                        let reply = if !state.options.is_empty() {
+                            state.options[state.selected_option].clone()
+                        } else {
+                            state.input.clone()
+                        };
+                        self.bus.publish(BusEvent::QuestionReplied {
+                            id: state.question_id.parse().unwrap_or_else(|_| {
+                                opencoder_core::id::Identifier::create(
+                                    opencoder_core::id::Prefix::Question,
+                                )
+                            }),
+                            session_id: state.session_id.parse().unwrap_or_else(|_| {
+                                opencoder_core::id::Identifier::create(
+                                    opencoder_core::id::Prefix::Session,
+                                )
+                            }),
+                            reply,
+                        });
+                    }
+                    ActiveOverlay::AgentSelector(state) => {
+                        if let Some((name, _)) = state.agents.get(state.selected) {
+                            self.current_agent = name.clone();
+                        }
+                    }
+                    ActiveOverlay::None => {}
+                }
+            }
             Action::OverlayDismiss => {
-                if let ActiveOverlay::Permission(state) = std::mem::replace(&mut self.overlay, ActiveOverlay::None) {
+                if let ActiveOverlay::Permission(state) =
+                    std::mem::replace(&mut self.overlay, ActiveOverlay::None)
+                {
                     // Dismiss = deny
                     self.bus.publish(BusEvent::PermissionReplied {
-                        session_id: state
-                            .session_id
-                            .parse()
-                            .unwrap_or_else(|_| opencoder_core::id::Identifier::create(opencoder_core::id::Prefix::Session)),
-                        request_id: state
-                            .request_id
-                            .parse()
-                            .unwrap_or_else(|_| opencoder_core::id::Identifier::create(opencoder_core::id::Prefix::Permission)),
+                        session_id: state.session_id.parse().unwrap_or_else(|_| {
+                            opencoder_core::id::Identifier::create(
+                                opencoder_core::id::Prefix::Session,
+                            )
+                        }),
+                        request_id: state.request_id.parse().unwrap_or_else(|_| {
+                            opencoder_core::id::Identifier::create(
+                                opencoder_core::id::Prefix::Permission,
+                            )
+                        }),
                         reply: "deny".to_string(),
                     });
                 }
@@ -354,9 +408,8 @@ impl App {
                 }
                 Err(e) => {
                     self.input = content; // restore input so user doesn't lose it
-                    self.status_text = format!(
-                        "Provider error: {e} — set ANTHROPIC_API_KEY or OPENAI_API_KEY"
-                    );
+                    self.status_text =
+                        format!("Provider error: {e} — set ANTHROPIC_API_KEY or OPENAI_API_KEY");
                     return Ok(());
                 }
             }
@@ -372,12 +425,13 @@ impl App {
         let loop_config = AgentLoopConfig {
             session_id: session.id.clone(),
             project_id: session.project_id.clone(),
-            agent_name: "build".to_string(),
+            agent_name: self.current_agent.clone(),
             model: model_id,
             provider: self.provider.clone().unwrap(),
             cancel,
             project_dir: self.project_dir.clone(),
             config: self.config.clone(),
+            db: self.db.clone(),
         };
 
         let session_svc = self.session_svc.clone();
@@ -390,7 +444,7 @@ impl App {
                 loop_config,
                 &content,
                 session_svc,
-                &agent_registry,
+                agent_registry,
                 tools,
                 &bus,
             )
@@ -460,6 +514,14 @@ impl App {
                         selected_option: 0,
                     });
                 }
+            }
+            BusEvent::SessionUpdated(session_event) => {
+                if let Some(ref mut session) = self.current_session
+                    && session.id == session_event.id.as_str()
+                {
+                    session.title = session_event.title.clone();
+                }
+                self.load_sessions().ok();
             }
             _ => {}
         }

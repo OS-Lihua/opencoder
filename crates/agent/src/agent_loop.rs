@@ -13,6 +13,7 @@ use tracing::{debug, info, warn};
 use opencoder_core::bus::{Bus, Event, SessionStatusInfo};
 use opencoder_core::config::Config;
 use opencoder_core::id::{Identifier, Prefix};
+use opencoder_core::storage::Database;
 use opencoder_provider::models_db::ModelsDb;
 use opencoder_provider::provider::{
     ChatMessage, ChatRequest, ContentPart, FinishReason, LlmProvider, Role, ToolDefinition,
@@ -27,7 +28,7 @@ use opencoder_tool::tool::Tool;
 
 use opencoder_tool::tool::AgentRunner;
 
-use crate::agent::{AgentDef, AgentRegistry, PermissionAction};
+use crate::agent::{AgentDef, AgentRegistry, PermissionAction, PermissionRule};
 use crate::permission::{self, Ruleset};
 
 /// Configuration for an agent loop run.
@@ -40,6 +41,7 @@ pub struct AgentLoopConfig {
     pub cancel: CancellationToken,
     pub project_dir: std::path::PathBuf,
     pub config: Config,
+    pub db: Arc<Database>,
 }
 
 /// An AgentRunner implementation that can spawn sub-agent loops.
@@ -52,6 +54,7 @@ pub struct SubAgentRunner {
     pub project_dir: std::path::PathBuf,
     pub config: Config,
     pub model: String,
+    pub db: Arc<Database>,
 }
 
 #[async_trait::async_trait]
@@ -80,13 +83,14 @@ impl AgentRunner for SubAgentRunner {
             cancel,
             project_dir: self.project_dir.clone(),
             config: self.config.clone(),
+            db: self.db.clone(),
         };
 
         run(
             loop_config,
             prompt,
             self.session_svc.clone(),
-            &self.registry,
+            self.registry.clone(),
             self.tools.clone(),
             &self.bus,
         )
@@ -131,16 +135,30 @@ pub async fn run(
     config: AgentLoopConfig,
     user_content: &str,
     session_svc: Arc<SessionService>,
-    registry: &AgentRegistry,
+    registry: Arc<AgentRegistry>,
     tools: HashMap<String, Arc<dyn Tool>>,
     bus: &Bus,
 ) -> Result<()> {
     let agent_def = registry
         .get(&config.agent_name)
-        .ok_or_else(|| anyhow::anyhow!("unknown agent: {}", config.agent_name))?;
+        .ok_or_else(|| anyhow::anyhow!("unknown agent: {}", config.agent_name))?
+        .clone();
 
     // Filter tools by agent permissions
-    let available_tools = filter_tools(&tools, agent_def);
+    let available_tools = filter_tools(&tools, &agent_def);
+
+    // Create sub-agent runner for tools that need to spawn sub-agents
+    let sub_agent_runner: Arc<dyn AgentRunner> = Arc::new(SubAgentRunner {
+        session_svc: session_svc.clone(),
+        registry: registry.clone(),
+        tools: tools.clone(),
+        provider: config.provider.clone(),
+        bus: bus.clone(),
+        project_dir: config.project_dir.clone(),
+        config: config.config.clone(),
+        model: config.model.clone(),
+        db: config.db.clone(),
+    });
 
     // Add user message
     let user_msg = Message::User(UserMessage {
@@ -157,6 +175,9 @@ pub async fn run(
             .unwrap_or_else(|_| Identifier::create(Prefix::Session)),
         status: SessionStatusInfo::Busy,
     });
+
+    // Session-scoped permission rules (for "Always Allow")
+    let mut session_rules: Ruleset = Vec::new();
 
     let mut step = 0u32;
     let max_steps = agent_def.max_steps;
@@ -187,7 +208,7 @@ pub async fn run(
         let messages = build_llm_messages(
             &session_svc,
             &config.session_id,
-            agent_def,
+            &agent_def,
             &config.project_dir,
             &config.config,
         )?;
@@ -214,8 +235,14 @@ pub async fn run(
             .stream(request, config.cancel.clone())
             .await?;
 
-        let processor =
-            StreamProcessor::new(session_svc.clone(), available_tools.clone(), Some(bus.clone()));
+        let processor = StreamProcessor::new(
+            session_svc.clone(),
+            available_tools.clone(),
+            Some(bus.clone()),
+            Some(config.db.clone()),
+            Some(config.project_dir.clone()),
+            Some(sub_agent_runner.clone()),
+        );
         let result = processor
             .process(
                 &config.session_id,
@@ -229,7 +256,13 @@ pub async fn run(
         // If there are tool calls, check permissions then execute
         if result.has_tool_calls && !result.pending_tools.is_empty() {
             let default_rules = permission::default_rules();
-            let rulesets: Vec<&Ruleset> = vec![&default_rules, &agent_def.permission_rules];
+            // Snapshot session_rules for evaluation; check_permissions may add new rules
+            let session_rules_snapshot = session_rules.clone();
+            let rulesets: Vec<&Ruleset> = vec![
+                &default_rules,
+                &agent_def.permission_rules,
+                &session_rules_snapshot,
+            ];
 
             // Partition tools into allowed and those needing permission
             let (allowed, denied_results) = check_permissions(
@@ -239,6 +272,7 @@ pub async fn run(
                 bus,
                 &session_svc,
                 &config.cancel,
+                &mut session_rules,
             )
             .await;
 
@@ -271,6 +305,22 @@ pub async fn run(
 
         // No tool calls or non-tool finish reason → done
         break;
+    }
+
+    // Auto-generate title for build agent if still default
+    if config.agent_name == "build"
+        && let Ok(session) = session_svc.get(&config.session_id)
+        && session.title == "New Session"
+    {
+        let svc = session_svc.clone();
+        let provider = config.provider.clone();
+        let model = config.model.clone();
+        let sid = config.session_id.clone();
+        tokio::spawn(async move {
+            if let Err(e) = generate_title(&sid, &svc, &provider, &model).await {
+                warn!("title generation failed: {e}");
+            }
+        });
     }
 
     // Publish idle status
@@ -405,6 +455,7 @@ async fn check_permissions(
     bus: &Bus,
     session_svc: &SessionService,
     cancel: &CancellationToken,
+    session_rules: &mut Ruleset,
 ) -> (Vec<PendingToolInfo>, Vec<ToolResultInfo>) {
     let mut allowed = Vec::new();
     let mut denied_results = Vec::new();
@@ -423,18 +474,17 @@ async fn check_permissions(
                     let input: serde_json::Value =
                         serde_json::from_str(&info.arguments_json).unwrap_or_default();
                     let now = chrono::Utc::now().timestamp_millis();
-                    let part =
-                        opencoder_session::message::Part::Tool(ToolPart {
-                            call_id: info.call_id.clone(),
-                            tool: info.name.clone(),
-                            state: ToolState::Error {
-                                input,
-                                error: "Permission denied".to_string(),
-                                metadata: None,
-                                time_start: now,
-                                time_end: now,
-                            },
-                        });
+                    let part = opencoder_session::message::Part::Tool(ToolPart {
+                        call_id: info.call_id.clone(),
+                        tool: info.name.clone(),
+                        state: ToolState::Error {
+                            input,
+                            error: "Permission denied".to_string(),
+                            metadata: None,
+                            time_start: now,
+                            time_end: now,
+                        },
+                    });
                     let _ = session_svc.update_part(pid, &part);
                 }
                 denied_results.push(ToolResultInfo {
@@ -480,8 +530,16 @@ async fn check_permissions(
                 };
 
                 match reply.as_str() {
-                    "allow" | "always" => {
-                        // TODO: "always" should persist the rule for future calls
+                    "allow" => {
+                        allowed.push(info);
+                    }
+                    "always" => {
+                        // Persist as a session-scoped rule for future calls
+                        session_rules.push(PermissionRule {
+                            tool: info.name.clone(),
+                            pattern: None,
+                            action: PermissionAction::Allow,
+                        });
                         allowed.push(info);
                     }
                     _ => {
@@ -522,14 +580,8 @@ async fn check_permissions(
 fn extract_permission_pattern(tool_name: &str, arguments_json: &str) -> String {
     let parsed: serde_json::Value = serde_json::from_str(arguments_json).unwrap_or_default();
     match tool_name {
-        "bash" => parsed["command"]
-            .as_str()
-            .unwrap_or("*")
-            .to_string(),
-        "write" | "edit" | "read" => parsed["file_path"]
-            .as_str()
-            .unwrap_or("*")
-            .to_string(),
+        "bash" => parsed["command"].as_str().unwrap_or("*").to_string(),
+        "write" | "edit" | "read" => parsed["file_path"].as_str().unwrap_or("*").to_string(),
         _ => "*".to_string(),
     }
 }
@@ -577,6 +629,63 @@ async fn maybe_compact(config: &AgentLoopConfig, session_svc: &SessionService, i
             warn!("compaction failed: {e}");
         }
     }
+}
+
+/// Generate a title for a session using the title agent's system prompt.
+async fn generate_title(
+    session_id: &str,
+    session_svc: &SessionService,
+    provider: &Arc<dyn LlmProvider>,
+    model: &str,
+) -> Result<()> {
+    let messages = session_svc.messages(session_id)?;
+
+    // Collect conversation context (first ~1000 chars)
+    let mut context = String::new();
+    for msg in &messages {
+        match &msg.message {
+            Message::User(u) => {
+                context.push_str("User: ");
+                context.push_str(&u.content);
+                context.push('\n');
+            }
+            Message::Assistant(_) => {
+                for p in &msg.parts {
+                    if let Part::Text(t) = &p.part {
+                        context.push_str("Assistant: ");
+                        context.push_str(&t.content);
+                        context.push('\n');
+                    }
+                }
+            }
+        }
+        if context.len() > 1000 {
+            break;
+        }
+    }
+
+    if context.is_empty() {
+        return Ok(());
+    }
+
+    let system_prompt = include_str!("prompts/title.txt");
+    let request = ChatRequest::new(
+        model.to_string(),
+        vec![
+            ChatMessage::text(Role::System, system_prompt),
+            ChatMessage::text(Role::User, &context),
+        ],
+    );
+
+    let cancel = CancellationToken::new();
+    let response = provider.chat(request, cancel).await?;
+    let title = response.content.trim().to_string();
+
+    if !title.is_empty() {
+        session_svc.set_title(session_id, &title)?;
+    }
+
+    Ok(())
 }
 
 /// Add tool result messages to the session for the next LLM call.

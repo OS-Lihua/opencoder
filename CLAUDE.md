@@ -6,10 +6,14 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 OpenCoder is an AI-powered coding agent written in Rust — a rewrite of [OpenCode](https://github.com/opencode-ai/opencode) (TypeScript/Bun). It's a Cargo workspace with 15 crates providing a CLI/TUI, HTTP API server, LLM provider abstraction, tool system, and agent loop.
 
+## Prerequisites
+
+- Rust 1.88+ (edition 2024, uses let-chains)
+
 ## Commands
 
 ```bash
-cargo test                              # all tests (144 currently)
+cargo test                              # all tests
 cargo test -p opencoder-tool            # single crate tests
 cargo test -p opencoder-core id::tests  # single test module
 
@@ -21,6 +25,8 @@ cargo run -p opencoder-cli              # launch TUI (default)
 cargo run -p opencoder-cli -- run "prompt"  # non-interactive single prompt
 cargo run -p opencoder-cli -- serve     # headless HTTP API server (port 4096)
 ```
+
+Makefile shortcuts: `make test`, `make lint`, `make fmt`, `make check`, `make dev`, `make build`.
 
 ## Architecture
 

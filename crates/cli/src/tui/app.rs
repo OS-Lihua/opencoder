@@ -72,7 +72,7 @@ pub struct App {
     pub bus: Bus,
     pub config: Config,
     pub project_dir: PathBuf,
-    pub provider: Arc<dyn LlmProvider>,
+    pub provider: Option<Arc<dyn LlmProvider>>,
     pub tool_registry: Arc<ToolRegistry>,
     pub agent_registry: Arc<AgentRegistry>,
     pub session_svc: Arc<SessionService>,
@@ -86,7 +86,7 @@ impl App {
         bus: Bus,
         config: Config,
         project_dir: PathBuf,
-        provider: Arc<dyn LlmProvider>,
+        provider: Option<Arc<dyn LlmProvider>>,
         tool_registry: Arc<ToolRegistry>,
         agent_registry: Arc<AgentRegistry>,
         session_svc: Arc<SessionService>,
@@ -225,6 +225,23 @@ impl App {
             .model
             .as_deref()
             .unwrap_or("anthropic/claude-sonnet-4-20250514");
+
+        // Lazy-init provider if not yet available
+        if self.provider.is_none() {
+            match provider_init::build_provider_with_config(model_str, &self.config) {
+                Ok((p, _)) => {
+                    self.provider = Some(p);
+                }
+                Err(e) => {
+                    self.input = content; // restore input so user doesn't lose it
+                    self.status_text = format!(
+                        "Provider error: {e} — set ANTHROPIC_API_KEY or OPENAI_API_KEY"
+                    );
+                    return Ok(());
+                }
+            }
+        }
+
         let (_, model_id) = provider_init::parse_model_str(model_str);
 
         let cancel = tokio_util::sync::CancellationToken::new();
@@ -237,7 +254,7 @@ impl App {
             project_id: session.project_id.clone(),
             agent_name: "build".to_string(),
             model: model_id,
-            provider: self.provider.clone(),
+            provider: self.provider.clone().unwrap(),
             cancel,
             project_dir: self.project_dir.clone(),
             config: self.config.clone(),

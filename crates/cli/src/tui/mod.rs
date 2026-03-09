@@ -36,7 +36,7 @@ pub async fn run_tui(
     bus: Bus,
     config: Config,
     project_dir: PathBuf,
-    provider: Arc<dyn LlmProvider>,
+    provider: Option<Arc<dyn LlmProvider>>,
     tool_registry: Arc<ToolRegistry>,
     agent_registry: Arc<AgentRegistry>,
     session_svc: Arc<SessionService>,

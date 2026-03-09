@@ -291,20 +291,15 @@ async fn main() {
         }
         None => {
             // Default: launch TUI
+            // Try to build provider, but don't exit on failure — allow TUI to launch
             let model_str = config.model.as_deref().unwrap_or(DEFAULT_MODEL);
-            let (provider, _model_id) =
-                match provider_init::build_provider_with_config(model_str, &config) {
-                    Ok(p) => p,
-                    Err(e) => {
-                        eprintln!("error initializing provider: {e}");
-                        eprintln!(
-                            "hint: set ANTHROPIC_API_KEY or OPENAI_API_KEY environment variable"
-                        );
-                        eprintln!();
-                        eprintln!("Or use `opencoder run <prompt>` for non-interactive mode.");
-                        process::exit(1);
-                    }
-                };
+            let provider = match provider_init::build_provider_with_config(model_str, &config) {
+                Ok((p, _model_id)) => Some(p),
+                Err(e) => {
+                    tracing::warn!("provider init deferred: {e}");
+                    None
+                }
+            };
 
             let session_svc = Arc::new(SessionService::new(db.clone(), bus.clone()));
             let agent_registry = Arc::new(AgentRegistry::new());

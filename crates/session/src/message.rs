@@ -210,6 +210,8 @@ pub enum ToolState {
 pub struct StepStartPart {
     #[serde(default)]
     pub step_index: u32,
+    #[serde(default)]
+    pub snapshot_hash: Option<String>,
 }
 
 /// Marks the end of an LLM generation step with usage info.
@@ -396,7 +398,10 @@ mod tests {
                 media_type: "image/png".into(),
                 content: None,
             }),
-            Part::StepStart(StepStartPart { step_index: 0 }),
+            Part::StepStart(StepStartPart {
+                step_index: 0,
+                snapshot_hash: None,
+            }),
             Part::StepFinish(StepFinishPart {
                 step_index: 0,
                 finish_reason: "stop".into(),

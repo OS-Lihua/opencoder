@@ -154,6 +154,7 @@ async fn send_message(
         project_dir: state.project_dir.clone(),
         config: state.config.clone(),
         db: state.db.clone(),
+        snapshot_store: None,
     };
 
     let session_svc = state.session_svc.clone();

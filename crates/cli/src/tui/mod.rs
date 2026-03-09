@@ -25,6 +25,7 @@ use opencoder_core::config::Config;
 use opencoder_core::storage::Database;
 use opencoder_provider::provider::LlmProvider;
 use opencoder_session::SessionService;
+use opencoder_snapshot::SnapshotStore;
 use opencoder_tool::ToolRegistry;
 
 use app::{ActiveOverlay, App, Screen};
@@ -40,6 +41,7 @@ pub async fn run_tui(
     tool_registry: Arc<ToolRegistry>,
     agent_registry: Arc<AgentRegistry>,
     session_svc: Arc<SessionService>,
+    snapshot_store: Option<Arc<SnapshotStore>>,
 ) -> Result<()> {
     // Setup terminal
     enable_raw_mode()?;
@@ -58,6 +60,7 @@ pub async fn run_tui(
         tool_registry,
         agent_registry,
         session_svc,
+        snapshot_store,
     );
 
     // Load initial data
@@ -99,6 +102,12 @@ async fn run_loop(
                 }
                 ActiveOverlay::AgentSelector(state) => {
                     components::agent_selector::render(f, state);
+                }
+                ActiveOverlay::FileSelector(state) => {
+                    components::file_selector::render(f, state);
+                }
+                ActiveOverlay::ModelSelector(state) => {
+                    components::model_selector::render(f, state);
                 }
             }
         })?;

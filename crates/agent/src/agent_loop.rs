@@ -24,6 +24,7 @@ use opencoder_session::message::{
 };
 use opencoder_session::processor::{PendingToolInfo, StreamProcessor, ToolResultInfo};
 use opencoder_session::session::SessionService;
+use opencoder_snapshot::SnapshotStore;
 use opencoder_tool::tool::Tool;
 
 use opencoder_tool::tool::AgentRunner;
@@ -42,6 +43,7 @@ pub struct AgentLoopConfig {
     pub project_dir: std::path::PathBuf,
     pub config: Config,
     pub db: Arc<Database>,
+    pub snapshot_store: Option<Arc<SnapshotStore>>,
 }
 
 /// An AgentRunner implementation that can spawn sub-agent loops.
@@ -84,6 +86,7 @@ impl AgentRunner for SubAgentRunner {
             project_dir: self.project_dir.clone(),
             config: self.config.clone(),
             db: self.db.clone(),
+            snapshot_store: None,
         };
 
         run(
@@ -229,6 +232,17 @@ pub async fn run(
         request.temperature = agent_def.temperature;
         request.top_p = agent_def.top_p;
 
+        // Track snapshot before streaming
+        let snapshot_hash = if let Some(ref store) = config.snapshot_store {
+            let s = store.clone();
+            tokio::task::spawn_blocking(move || s.track().ok())
+                .await
+                .ok()
+                .flatten()
+        } else {
+            None
+        };
+
         // Stream LLM response
         let stream = config
             .provider
@@ -250,6 +264,7 @@ pub async fn run(
                 &config.agent_name,
                 stream,
                 config.cancel.clone(),
+                snapshot_hash,
             )
             .await?;
 

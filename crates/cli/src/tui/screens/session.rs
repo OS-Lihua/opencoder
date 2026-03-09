@@ -62,14 +62,18 @@ pub fn render(f: &mut Frame, app: &App) {
             theme::border_style()
         });
 
-    let input = Paragraph::new(app.input.as_str())
+    let input = Paragraph::new(app.input_state.text.as_str())
         .style(theme::input_style())
         .block(input_block);
     f.render_widget(input, chunks[2]);
 
     // Set cursor position in input area
     if !app.agent_running {
-        let input_x = chunks[2].x + app.input.len() as u16 + 1;
+        // Calculate display width up to cursor byte position
+        let display_cursor = app.input_state.text[..app.input_state.cursor]
+            .chars()
+            .count() as u16;
+        let input_x = chunks[2].x + display_cursor + 1;
         let input_y = chunks[2].y + 1;
         f.set_cursor_position((input_x.min(chunks[2].right() - 2), input_y));
     }
@@ -85,9 +89,9 @@ pub fn render(f: &mut Frame, app: &App) {
     } else {
         let agent_part = format!("[{}]", app.current_agent);
         if token_info.is_empty() {
-            format!(" {agent_part} Ready | Ctrl+A=Agent | Ctrl+C=Cancel | Esc=Home ")
+            format!(" {agent_part} Ready | Ctrl+G=Agent | Ctrl+C=Cancel | Esc=Home ")
         } else {
-            format!(" {agent_part} Ready | {token_info} | Ctrl+A=Agent | Ctrl+C=Cancel | Esc=Home ")
+            format!(" {agent_part} Ready | {token_info} | Ctrl+G=Agent | Ctrl+C=Cancel | Esc=Home ")
         }
     };
     let status = Paragraph::new(status_text).style(theme::dim_style());

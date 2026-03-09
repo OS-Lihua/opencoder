@@ -45,12 +45,7 @@ fn render_part(part: &Part, lines: &mut Vec<Line<'static>>) {
                 return;
             }
             lines.push(Line::from(""));
-            for line in text.content.lines() {
-                lines.push(Line::from(Span::styled(
-                    line.to_string(),
-                    theme::assistant_style(),
-                )));
-            }
+            lines.extend(super::markdown::render_markdown(&text.content));
         }
         Part::Tool(tool) => {
             match &tool.state {

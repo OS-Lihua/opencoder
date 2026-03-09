@@ -196,6 +196,7 @@ async fn main() {
                 project_dir: dir.clone(),
                 config: config.clone(),
                 db: db.clone(),
+                snapshot_store: None,
             };
 
             // Start streaming output in background
@@ -304,9 +305,52 @@ async fn main() {
                 }
             };
 
+            // Initialize snapshot store
+            let snapshot_store = opencoder_snapshot::SnapshotStore::new(&dir)
+                .ok()
+                .map(Arc::new);
+            if snapshot_store.is_some() {
+                opencoder_snapshot::start_gc_task(dir.clone());
+            }
+
+            // Initialize LSP manager
+            let lsp_manager = Arc::new(opencoder_lsp::LspManager::new(&dir));
+
             let session_svc = Arc::new(SessionService::new(db.clone(), bus.clone()));
             let agent_registry = Arc::new(AgentRegistry::new());
-            let tool_registry = Arc::new(ToolRegistry::with_builtins());
+            let mut tool_registry = ToolRegistry::with_builtins();
+            tool_registry.register(Arc::new(opencoder_tool::tools::lsp::LspTool::new(
+                lsp_manager.clone(),
+            )));
+
+            // Connect MCP servers and register their tools
+            if let Some(ref mcp_configs) = config.mcp {
+                let configs: std::collections::HashMap<String, opencoder_mcp::McpServerConfig> =
+                    mcp_configs
+                        .iter()
+                        .filter_map(|(name, val)| {
+                            serde_json::from_value::<opencoder_mcp::McpServerConfig>(val.clone())
+                                .ok()
+                                .map(|c| (name.clone(), c))
+                        })
+                        .collect();
+                if !configs.is_empty() {
+                    let mgr = opencoder_mcp::McpManager::connect_all(configs).await;
+                    for (server_name, client) in mgr.clients() {
+                        for tool_def in client.tools() {
+                            tool_registry.register(Arc::new(
+                                opencoder_tool::tools::mcp::McpToolWrapper::new(
+                                    server_name,
+                                    tool_def,
+                                    client.clone(),
+                                ),
+                            ));
+                        }
+                    }
+                }
+            }
+
+            let tool_registry = Arc::new(tool_registry);
 
             if let Err(e) = tui::run_tui(
                 db,
@@ -317,6 +361,7 @@ async fn main() {
                 tool_registry,
                 agent_registry,
                 session_svc,
+                snapshot_store,
             )
             .await
             {

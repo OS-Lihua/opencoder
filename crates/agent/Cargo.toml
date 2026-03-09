@@ -18,3 +18,4 @@ anyhow = { workspace = true }
 chrono = { workspace = true }
 tokio-util = { workspace = true }
 async-trait = "0.1"
+opencoder-snapshot = { workspace = true }

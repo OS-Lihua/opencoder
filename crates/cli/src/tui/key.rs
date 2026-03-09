@@ -5,6 +5,8 @@ use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use super::app::{
     Action, ActiveOverlay, AgentSelectorState, InputMode, QuestionDialogState, Screen,
 };
+use super::components::file_selector::FileSelectorState;
+use super::components::model_selector::ModelSelectorState;
 
 pub fn handle_key(
     key: KeyEvent,
@@ -21,6 +23,8 @@ pub fn handle_key(
         }
         ActiveOverlay::Question(state) => return handle_question_overlay_key(key, state),
         ActiveOverlay::AgentSelector(state) => return handle_agent_selector_key(key, state),
+        ActiveOverlay::FileSelector(state) => return handle_file_selector_key(key, state),
+        ActiveOverlay::ModelSelector(state) => return handle_model_selector_key(key, state),
     }
 
     // Global: Ctrl+C always quits or cancels
@@ -131,10 +135,22 @@ fn handle_session_editing_key(key: KeyEvent) -> Action {
             }
         }
         KeyCode::Backspace => Action::DeleteChar,
+        KeyCode::Left => Action::CursorLeft,
+        KeyCode::Right => Action::CursorRight,
+        KeyCode::Up => Action::HistoryUp,
+        KeyCode::Down => Action::HistoryDown,
+        KeyCode::Home => Action::CursorHome,
+        KeyCode::End => Action::CursorEnd,
         KeyCode::Char(c) => {
             if key.modifiers.contains(KeyModifiers::CONTROL) {
                 match c {
-                    'a' => Action::OpenAgentSelector,
+                    'a' => Action::CursorHome,
+                    'e' => Action::CursorEnd,
+                    'k' => Action::KillToEnd,
+                    'u' => Action::KillToStart,
+                    'w' => Action::KillWordBack,
+                    'g' => Action::OpenAgentSelector,
+                    'm' => Action::OpenModelSelector,
                     'j' => Action::InsertNewline,
                     'l' => Action::Noop, // clear screen
                     _ => Action::Noop,
@@ -145,6 +161,34 @@ fn handle_session_editing_key(key: KeyEvent) -> Action {
         }
         KeyCode::PageUp => Action::ScrollUp,
         KeyCode::PageDown => Action::ScrollDown,
+        _ => Action::Noop,
+    }
+}
+
+fn handle_file_selector_key(key: KeyEvent, state: &FileSelectorState) -> Action {
+    match key.code {
+        KeyCode::Up => Action::OverlaySelect(state.selected.saturating_sub(1)),
+        KeyCode::Down => {
+            Action::OverlaySelect((state.selected + 1).min(state.matches.len().saturating_sub(1)))
+        }
+        KeyCode::Enter => Action::OverlayConfirm,
+        KeyCode::Esc => Action::OverlayDismiss,
+        KeyCode::Backspace => Action::OverlayBackspace,
+        KeyCode::Char(c) => Action::OverlayInput(c),
+        _ => Action::Noop,
+    }
+}
+
+fn handle_model_selector_key(key: KeyEvent, state: &ModelSelectorState) -> Action {
+    match key.code {
+        KeyCode::Up => Action::OverlaySelect(state.selected.saturating_sub(1)),
+        KeyCode::Down => {
+            Action::OverlaySelect((state.selected + 1).min(state.filtered.len().saturating_sub(1)))
+        }
+        KeyCode::Enter => Action::OverlayConfirm,
+        KeyCode::Esc => Action::OverlayDismiss,
+        KeyCode::Backspace => Action::OverlayBackspace,
+        KeyCode::Char(c) => Action::OverlayInput(c),
         _ => Action::Noop,
     }
 }

@@ -3,6 +3,8 @@ pub mod bash;
 pub mod edit;
 pub mod glob;
 pub mod grep;
+pub mod lsp;
+pub mod mcp;
 pub mod multiedit;
 pub mod question;
 pub mod read;

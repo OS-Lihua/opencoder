@@ -66,6 +66,7 @@ impl StreamProcessor {
         _agent: &str,
         mut stream: std::pin::Pin<Box<dyn futures::Stream<Item = Result<StreamEvent>> + Send>>,
         cancel: tokio_util::sync::CancellationToken,
+        snapshot_hash: Option<String>,
     ) -> Result<ProcessResult> {
         let mut text_content = String::new();
         let mut text_part_id: Option<String> = None;
@@ -81,7 +82,10 @@ impl StreamProcessor {
         self.session_svc.add_part(
             session_id,
             message_id,
-            &Part::StepStart(StepStartPart { step_index }),
+            &Part::StepStart(StepStartPart {
+                step_index,
+                snapshot_hash,
+            }),
         )?;
 
         loop {

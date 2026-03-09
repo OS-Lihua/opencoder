@@ -27,7 +27,7 @@ use opencoder_provider::provider::LlmProvider;
 use opencoder_session::SessionService;
 use opencoder_tool::ToolRegistry;
 
-use app::{App, Screen};
+use app::{ActiveOverlay, App, Screen};
 
 /// Run the TUI application.
 #[allow(clippy::too_many_arguments)]
@@ -83,9 +83,21 @@ async fn run_loop(
 
     loop {
         // Draw
-        terminal.draw(|f| match app.screen {
-            Screen::Home => screens::home::render(f, app),
-            Screen::Session => screens::session::render(f, app),
+        terminal.draw(|f| {
+            match app.screen {
+                Screen::Home => screens::home::render(f, app),
+                Screen::Session => screens::session::render(f, app),
+            }
+            // Render overlay on top if active
+            match &app.overlay {
+                ActiveOverlay::None => {}
+                ActiveOverlay::Permission(state) => {
+                    components::permission_dialog::render(f, state);
+                }
+                ActiveOverlay::Question(state) => {
+                    components::question_dialog::render(f, state);
+                }
+            }
         })?;
 
         // Handle events with 50ms poll timeout
@@ -99,7 +111,7 @@ async fn run_loop(
                 continue;
             }
 
-            let action = key::handle_key(key, &app.screen, &app.input_mode);
+            let action = key::handle_key(key, &app.screen, &app.input_mode, &app.overlay);
             if app.handle_action(action).await? {
                 break; // quit
             }

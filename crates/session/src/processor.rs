@@ -11,6 +11,7 @@ use chrono::Utc;
 use futures::StreamExt;
 use tracing::{debug, warn};
 
+use opencoder_core::bus::Bus;
 use opencoder_provider::provider::{FinishReason, StreamEvent};
 use opencoder_tool::tool::{Tool, ToolContext, ToolOutput};
 
@@ -29,11 +30,20 @@ struct PendingToolCall {
 pub struct StreamProcessor {
     session_svc: Arc<SessionService>,
     tools: HashMap<String, Arc<dyn Tool>>,
+    bus: Option<Bus>,
 }
 
 impl StreamProcessor {
-    pub fn new(session_svc: Arc<SessionService>, tools: HashMap<String, Arc<dyn Tool>>) -> Self {
-        Self { session_svc, tools }
+    pub fn new(
+        session_svc: Arc<SessionService>,
+        tools: HashMap<String, Arc<dyn Tool>>,
+        bus: Option<Bus>,
+    ) -> Self {
+        Self {
+            session_svc,
+            tools,
+            bus,
+        }
     }
 
     /// Process a stream of LLM events for a given session/message.
@@ -273,7 +283,7 @@ impl StreamProcessor {
                     agent: agent.to_string(),
                     call_id: info.call_id.clone(),
                     cancel: cancel.clone(),
-                    bus: None,
+                    bus: self.bus.clone().map(Arc::new),
                     db: None,
                     project_dir: None,
                     agent_runner: None,

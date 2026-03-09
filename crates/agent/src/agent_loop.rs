@@ -18,14 +18,17 @@ use opencoder_provider::provider::{
     ChatMessage, ChatRequest, ContentPart, FinishReason, LlmProvider, Role, ToolDefinition,
 };
 use opencoder_session::compaction;
-use opencoder_session::message::{AssistantMessage, Message, Part, UserMessage};
-use opencoder_session::processor::{StreamProcessor, ToolResultInfo};
+use opencoder_session::message::{
+    AssistantMessage, Message, Part, ToolPart, ToolState, UserMessage,
+};
+use opencoder_session::processor::{PendingToolInfo, StreamProcessor, ToolResultInfo};
 use opencoder_session::session::SessionService;
 use opencoder_tool::tool::Tool;
 
 use opencoder_tool::tool::AgentRunner;
 
-use crate::agent::{AgentDef, AgentRegistry};
+use crate::agent::{AgentDef, AgentRegistry, PermissionAction};
+use crate::permission::{self, Ruleset};
 
 /// Configuration for an agent loop run.
 pub struct AgentLoopConfig {
@@ -211,7 +214,8 @@ pub async fn run(
             .stream(request, config.cancel.clone())
             .await?;
 
-        let processor = StreamProcessor::new(session_svc.clone(), available_tools.clone());
+        let processor =
+            StreamProcessor::new(session_svc.clone(), available_tools.clone(), Some(bus.clone()));
         let result = processor
             .process(
                 &config.session_id,
@@ -222,17 +226,36 @@ pub async fn run(
             )
             .await?;
 
-        // If there are tool calls, execute them and loop
+        // If there are tool calls, check permissions then execute
         if result.has_tool_calls && !result.pending_tools.is_empty() {
-            let tool_results = processor
-                .execute_tools(
-                    &config.session_id,
-                    &msg_id,
-                    &config.agent_name,
-                    result.pending_tools,
-                    config.cancel.clone(),
-                )
-                .await?;
+            let default_rules = permission::default_rules();
+            let rulesets: Vec<&Ruleset> = vec![&default_rules, &agent_def.permission_rules];
+
+            // Partition tools into allowed and those needing permission
+            let (allowed, denied_results) = check_permissions(
+                result.pending_tools,
+                &rulesets,
+                &config.session_id,
+                bus,
+                &session_svc,
+                &config.cancel,
+            )
+            .await;
+
+            let mut tool_results: Vec<ToolResultInfo> = denied_results;
+
+            if !allowed.is_empty() {
+                let mut executed = processor
+                    .execute_tools(
+                        &config.session_id,
+                        &msg_id,
+                        &config.agent_name,
+                        allowed,
+                        config.cancel.clone(),
+                    )
+                    .await?;
+                tool_results.append(&mut executed);
+            }
 
             // Add tool result messages for the next LLM call
             add_tool_result_messages(&session_svc, &config.session_id, &tool_results)?;
@@ -369,6 +392,146 @@ fn build_llm_messages(
     }
 
     Ok(llm_messages)
+}
+
+/// Check permissions for a set of pending tool calls.
+///
+/// Returns (allowed_tools, denied_results): tools that passed permission checks,
+/// and synthetic error results for tools that were denied.
+async fn check_permissions(
+    pending: Vec<PendingToolInfo>,
+    rulesets: &[&Ruleset],
+    session_id: &str,
+    bus: &Bus,
+    session_svc: &SessionService,
+    cancel: &CancellationToken,
+) -> (Vec<PendingToolInfo>, Vec<ToolResultInfo>) {
+    let mut allowed = Vec::new();
+    let mut denied_results = Vec::new();
+
+    for info in pending {
+        let pattern = extract_permission_pattern(&info.name, &info.arguments_json);
+        let action = permission::evaluate(&info.name, &pattern, rulesets);
+
+        match action {
+            PermissionAction::Allow => {
+                allowed.push(info);
+            }
+            PermissionAction::Deny => {
+                // Update part to error state
+                if let Some(ref pid) = info.part_id {
+                    let input: serde_json::Value =
+                        serde_json::from_str(&info.arguments_json).unwrap_or_default();
+                    let now = chrono::Utc::now().timestamp_millis();
+                    let part =
+                        opencoder_session::message::Part::Tool(ToolPart {
+                            call_id: info.call_id.clone(),
+                            tool: info.name.clone(),
+                            state: ToolState::Error {
+                                input,
+                                error: "Permission denied".to_string(),
+                                metadata: None,
+                                time_start: now,
+                                time_end: now,
+                            },
+                        });
+                    let _ = session_svc.update_part(pid, &part);
+                }
+                denied_results.push(ToolResultInfo {
+                    call_id: info.call_id,
+                    tool_name: info.name,
+                    output: "Permission denied by policy.".to_string(),
+                    is_error: true,
+                });
+            }
+            PermissionAction::Ask => {
+                let perm_id = Identifier::create(Prefix::Permission);
+                let sid: opencoder_core::id::SessionId = session_id
+                    .parse()
+                    .unwrap_or_else(|_| Identifier::create(Prefix::Session));
+
+                bus.publish(Event::PermissionAsked {
+                    id: perm_id.clone(),
+                    session_id: sid.clone(),
+                    tool_name: info.name.clone(),
+                    description: pattern.clone(),
+                });
+
+                // Wait for reply
+                let mut rx = bus.subscribe();
+                let timeout = tokio::time::Duration::from_secs(300);
+
+                let reply = tokio::select! {
+                    _ = tokio::time::sleep(timeout) => "deny".to_string(),
+                    _ = cancel.cancelled() => "deny".to_string(),
+                    reply = async {
+                        loop {
+                            match rx.recv().await {
+                                Ok(Event::PermissionReplied { request_id, reply, .. })
+                                    if request_id == perm_id =>
+                                {
+                                    break reply;
+                                }
+                                Err(_) => break "deny".to_string(),
+                                _ => continue,
+                            }
+                        }
+                    } => reply,
+                };
+
+                match reply.as_str() {
+                    "allow" | "always" => {
+                        // TODO: "always" should persist the rule for future calls
+                        allowed.push(info);
+                    }
+                    _ => {
+                        // Denied
+                        if let Some(ref pid) = info.part_id {
+                            let input: serde_json::Value =
+                                serde_json::from_str(&info.arguments_json).unwrap_or_default();
+                            let now = chrono::Utc::now().timestamp_millis();
+                            let part = opencoder_session::message::Part::Tool(ToolPart {
+                                call_id: info.call_id.clone(),
+                                tool: info.name.clone(),
+                                state: ToolState::Error {
+                                    input,
+                                    error: "Permission denied by user".to_string(),
+                                    metadata: None,
+                                    time_start: now,
+                                    time_end: now,
+                                },
+                            });
+                            let _ = session_svc.update_part(pid, &part);
+                        }
+                        denied_results.push(ToolResultInfo {
+                            call_id: info.call_id,
+                            tool_name: info.name,
+                            output: "Permission denied by user.".to_string(),
+                            is_error: true,
+                        });
+                    }
+                }
+            }
+        }
+    }
+
+    (allowed, denied_results)
+}
+
+/// Extract a pattern string from tool arguments for permission matching.
+fn extract_permission_pattern(tool_name: &str, arguments_json: &str) -> String {
+    let parsed: serde_json::Value = serde_json::from_str(arguments_json).unwrap_or_default();
+    match tool_name {
+        "bash" => parsed["command"]
+            .as_str()
+            .unwrap_or("*")
+            .to_string(),
+        "write" | "edit" | "read" => parsed["file_path"]
+            .as_str()
+            .unwrap_or("*")
+            .to_string(),
+        _ => "*".to_string(),
+    }
 }
 
 /// Check for context overflow and run compaction if needed.

@@ -31,6 +31,32 @@ pub enum InputMode {
     Editing,
 }
 
+/// Active overlay (dialog) on top of the current screen.
+pub enum ActiveOverlay {
+    None,
+    Permission(PermissionDialogState),
+    Question(QuestionDialogState),
+}
+
+/// State for the permission dialog overlay.
+pub struct PermissionDialogState {
+    pub request_id: String,
+    pub session_id: String,
+    pub tool_name: String,
+    pub description: String,
+    pub selected: usize, // 0=Allow, 1=Deny, 2=Always Allow
+}
+
+/// State for the question dialog overlay.
+pub struct QuestionDialogState {
+    pub question_id: String,
+    pub session_id: String,
+    pub question_text: String,
+    pub options: Vec<String>,
+    pub input: String,
+    pub selected_option: usize,
+}
+
 /// User action from key input.
 #[derive(Debug, Clone)]
 pub enum Action {
@@ -49,6 +75,12 @@ pub enum Action {
     DeleteChar,
     InsertNewline,
     StartSearch,
+    // Overlay actions
+    OverlaySelect(usize),
+    OverlayConfirm,
+    OverlayDismiss,
+    OverlayInput(char),
+    OverlayBackspace,
     Noop,
 }
 
@@ -66,6 +98,9 @@ pub struct App {
     pub agent_running: bool,
     pub search_query: String,
     pub searching: bool,
+
+    // Overlay
+    pub overlay: ActiveOverlay,
 
     // Services
     pub db: Arc<Database>,
@@ -104,6 +139,7 @@ impl App {
             agent_running: false,
             search_query: String::new(),
             searching: false,
+            overlay: ActiveOverlay::None,
             db,
             bus,
             config,
@@ -211,6 +247,90 @@ impl App {
                     self.search_query.clear();
                 }
             }
+            Action::OverlaySelect(idx) => match &mut self.overlay {
+                ActiveOverlay::Permission(state) => {
+                    if idx < 3 {
+                        state.selected = idx;
+                    }
+                }
+                ActiveOverlay::Question(state) => {
+                    if !state.options.is_empty() && idx < state.options.len() {
+                        state.selected_option = idx;
+                    }
+                }
+                ActiveOverlay::None => {}
+            },
+            Action::OverlayConfirm => match std::mem::replace(&mut self.overlay, ActiveOverlay::None) {
+                ActiveOverlay::Permission(state) => {
+                    let reply = match state.selected {
+                        0 => "allow",
+                        1 => "deny",
+                        2 => "always",
+                        _ => "deny",
+                    };
+                    self.bus.publish(BusEvent::PermissionReplied {
+                        session_id: state
+                            .session_id
+                            .parse()
+                            .unwrap_or_else(|_| opencoder_core::id::Identifier::create(opencoder_core::id::Prefix::Session)),
+                        request_id: state
+                            .request_id
+                            .parse()
+                            .unwrap_or_else(|_| opencoder_core::id::Identifier::create(opencoder_core::id::Prefix::Permission)),
+                        reply: reply.to_string(),
+                    });
+                }
+                ActiveOverlay::Question(state) => {
+                    let reply = if !state.options.is_empty() {
+                        state.options[state.selected_option].clone()
+                    } else {
+                        state.input.clone()
+                    };
+                    self.bus.publish(BusEvent::QuestionReplied {
+                        id: state
+                            .question_id
+                            .parse()
+                            .unwrap_or_else(|_| opencoder_core::id::Identifier::create(opencoder_core::id::Prefix::Question)),
+                        session_id: state
+                            .session_id
+                            .parse()
+                            .unwrap_or_else(|_| opencoder_core::id::Identifier::create(opencoder_core::id::Prefix::Session)),
+                        reply,
+                    });
+                }
+                ActiveOverlay::None => {}
+            },
+            Action::OverlayDismiss => {
+                if let ActiveOverlay::Permission(state) = std::mem::replace(&mut self.overlay, ActiveOverlay::None) {
+                    // Dismiss = deny
+                    self.bus.publish(BusEvent::PermissionReplied {
+                        session_id: state
+                            .session_id
+                            .parse()
+                            .unwrap_or_else(|_| opencoder_core::id::Identifier::create(opencoder_core::id::Prefix::Session)),
+                        request_id: state
+                            .request_id
+                            .parse()
+                            .unwrap_or_else(|_| opencoder_core::id::Identifier::create(opencoder_core::id::Prefix::Permission)),
+                        reply: "deny".to_string(),
+                    });
+                }
+                // For question, dismiss just closes without replying (timeout will handle it)
+            }
+            Action::OverlayInput(c) => {
+                if let ActiveOverlay::Question(state) = &mut self.overlay
+                    && state.options.is_empty()
+                {
+                    state.input.push(c);
+                }
+            }
+            Action::OverlayBackspace => {
+                if let ActiveOverlay::Question(state) = &mut self.overlay
+                    && state.options.is_empty()
+                {
+                    state.input.pop();
+                }
+            }
             Action::Noop => {}
         }
         Ok(false)
@@ -304,6 +424,42 @@ impl App {
             BusEvent::PartUpdated { .. } | BusEvent::PartDelta { .. } => {
                 // Reload messages to show updates
                 self.load_messages().ok();
+            }
+            BusEvent::PermissionAsked {
+                id,
+                session_id,
+                tool_name,
+                description,
+            } => {
+                // Only handle if it's for the current session
+                let current_sid = self.current_session.as_ref().map(|s| s.id.as_str());
+                if current_sid == Some(session_id.as_str()) {
+                    self.overlay = ActiveOverlay::Permission(PermissionDialogState {
+                        request_id: id.to_string(),
+                        session_id: session_id.to_string(),
+                        tool_name,
+                        description,
+                        selected: 0,
+                    });
+                }
+            }
+            BusEvent::QuestionAsked {
+                id,
+                session_id,
+                question,
+                options,
+            } => {
+                let current_sid = self.current_session.as_ref().map(|s| s.id.as_str());
+                if current_sid == Some(session_id.as_str()) {
+                    self.overlay = ActiveOverlay::Question(QuestionDialogState {
+                        question_id: id.to_string(),
+                        session_id: session_id.to_string(),
+                        question_text: question,
+                        options,
+                        input: String::new(),
+                        selected_option: 0,
+                    });
+                }
             }
             _ => {}
         }

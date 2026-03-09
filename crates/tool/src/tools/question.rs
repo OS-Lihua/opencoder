@@ -64,6 +64,8 @@ impl Tool for QuestionTool {
             bus.publish(Event::QuestionAsked {
                 id: question_id.clone(),
                 session_id: session_id.clone(),
+                question: question.to_string(),
+                options: options.clone(),
             });
 
             // Wait for reply via bus subscription
@@ -88,10 +90,8 @@ impl Tool for QuestionTool {
                 reply = async {
                     loop {
                         match rx.recv().await {
-                            Ok(Event::QuestionReplied { id, .. }) if id == question_id => {
-                                // The reply content would be carried by another mechanism
-                                // For now, return a placeholder
-                                break "User acknowledged.".to_string();
+                            Ok(Event::QuestionReplied { id, reply, .. }) if id == question_id => {
+                                break reply;
                             }
                             Err(_) => break "Bus closed.".to_string(),
                             _ => continue,

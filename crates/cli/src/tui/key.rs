@@ -2,9 +2,21 @@
 
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
-use super::app::{Action, InputMode, Screen};
+use super::app::{Action, ActiveOverlay, InputMode, QuestionDialogState, Screen};
 
-pub fn handle_key(key: KeyEvent, screen: &Screen, input_mode: &InputMode) -> Action {
+pub fn handle_key(
+    key: KeyEvent,
+    screen: &Screen,
+    input_mode: &InputMode,
+    overlay: &ActiveOverlay,
+) -> Action {
+    // When an overlay is active, route keys to it first
+    match overlay {
+        ActiveOverlay::None => {}
+        ActiveOverlay::Permission(state) => return handle_permission_overlay_key(key, state.selected),
+        ActiveOverlay::Question(state) => return handle_question_overlay_key(key, state),
+    }
+
     // Global: Ctrl+C always quits or cancels
     if key.modifiers.contains(KeyModifiers::CONTROL) && key.code == KeyCode::Char('c') {
         if *screen == Screen::Session {
@@ -19,6 +31,52 @@ pub fn handle_key(key: KeyEvent, screen: &Screen, input_mode: &InputMode) -> Act
             InputMode::Normal => handle_session_normal_key(key),
             InputMode::Editing => handle_session_editing_key(key),
         },
+    }
+}
+
+fn handle_permission_overlay_key(key: KeyEvent, selected: usize) -> Action {
+    match key.code {
+        KeyCode::Up | KeyCode::Char('k') => {
+            Action::OverlaySelect(selected.saturating_sub(1))
+        }
+        KeyCode::Down | KeyCode::Char('j') => {
+            Action::OverlaySelect((selected + 1).min(2))
+        }
+        KeyCode::Enter => Action::OverlayConfirm,
+        KeyCode::Esc => Action::OverlayDismiss,
+        // Shortcuts: y=allow, n=deny, a=always
+        KeyCode::Char('y') => {
+            // Select Allow then confirm
+            Action::OverlayConfirm // selected is set to 0 by default (Allow)
+        }
+        KeyCode::Char('n') => Action::OverlayDismiss,
+        _ => Action::Noop,
+    }
+}
+
+fn handle_question_overlay_key(key: KeyEvent, state: &QuestionDialogState) -> Action {
+    if state.options.is_empty() {
+        // Free-text input mode
+        match key.code {
+            KeyCode::Enter => Action::OverlayConfirm,
+            KeyCode::Esc => Action::OverlayDismiss,
+            KeyCode::Backspace => Action::OverlayBackspace,
+            KeyCode::Char(c) => Action::OverlayInput(c),
+            _ => Action::Noop,
+        }
+    } else {
+        // Option selection mode
+        match key.code {
+            KeyCode::Up | KeyCode::Char('k') => {
+                Action::OverlaySelect(state.selected_option.saturating_sub(1))
+            }
+            KeyCode::Down | KeyCode::Char('j') => {
+                Action::OverlaySelect((state.selected_option + 1).min(state.options.len().saturating_sub(1)))
+            }
+            KeyCode::Enter => Action::OverlayConfirm,
+            KeyCode::Esc => Action::OverlayDismiss,
+            _ => Action::Noop,
+        }
     }
 }
 

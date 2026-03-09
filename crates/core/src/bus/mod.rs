@@ -54,6 +54,8 @@ pub enum Event {
     PermissionAsked {
         id: PermissionId,
         session_id: SessionId,
+        tool_name: String,
+        description: String,
     },
     PermissionReplied {
         session_id: SessionId,
@@ -65,10 +67,13 @@ pub enum Event {
     QuestionAsked {
         id: QuestionId,
         session_id: SessionId,
+        question: String,
+        options: Vec<String>,
     },
     QuestionReplied {
         id: QuestionId,
         session_id: SessionId,
+        reply: String,
     },
 
     // File events

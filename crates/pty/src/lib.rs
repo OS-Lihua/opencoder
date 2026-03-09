@@ -289,9 +289,10 @@ mod tests {
 
     #[tokio::test]
     async fn pty_output() {
-        let mut session = PtySession::create("echo", &["hello world".to_string()], &temp_dir(), 80, 24)
-            .await
-            .unwrap();
+        let mut session =
+            PtySession::create("echo", &["hello world".to_string()], &temp_dir(), 80, 24)
+                .await
+                .unwrap();
 
         let mut rx = session.take_output_rx().unwrap();
 

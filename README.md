@@ -20,7 +20,7 @@ OpenCoder is a Rust rewrite of [OpenCode](https://github.com/opencode-ai/opencod
 
 ### Prerequisites
 
-- Rust 1.87+ (edition 2024, uses let-chains)
+- Rust 1.88+ (edition 2024, uses let-chains)
 - An API key for at least one LLM provider
 
 ### Install

@@ -25,13 +25,24 @@ OpenCoder is a Rust rewrite of [OpenCode](https://github.com/opencode-ai/opencod
 
 ### Install
 
+**Homebrew (macOS/Linux)**
 ```bash
-# From source
-cargo install --path crates/cli
+brew install OS-Lihua/tap/opencoder
+```
 
-# Or build manually
-cargo build --release
-# Binary at: target/release/opencoder
+**Pre-built binaries**
+
+Download from [GitHub Releases](https://github.com/OS-Lihua/opencoder/releases/latest).
+
+**cargo-binstall (fast, no compilation)**
+```bash
+cargo binstall opencoder-cli
+```
+
+**From source**
+```bash
+cargo install --path crates/cli
+# Or: cargo build --release
 ```
 
 ### Set up API key

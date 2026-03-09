@@ -313,3 +313,19 @@ jobs:
             echo "::endgroup::"
             sleep 20  # crates.io index propagation
           done
+
+  # ─── Homebrew: update tap formula ──────────────────────────────────
+  update-homebrew:
+    name: Update Homebrew tap
+    needs: [prepare, release]
+    if: ${{ !inputs.dry_run }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger tap formula update
+        uses: peter-evans/repository-dispatch@v3
+        with:
+          token: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+          repository: OS-Lihua/homebrew-tap
+          event-type: update-formula
+          client-payload: '{"version": "${{ needs.prepare.outputs.version }}"}'
+

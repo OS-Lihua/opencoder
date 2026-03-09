@@ -258,9 +258,12 @@ impl Default for PtyManager {
 mod tests {
     use super::*;
 
+    fn temp_dir() -> String {
+        std::env::temp_dir().to_string_lossy().to_string()
+    }
     #[tokio::test]
     async fn create_pty_session() {
-        let session = PtySession::create("echo", &["hello".to_string()], "/tmp", 80, 24).await;
+        let session = PtySession::create("echo", &["hello".to_string()], &temp_dir(), 80, 24).await;
         assert!(session.is_ok());
         let session = session.unwrap();
         assert_eq!(session.info().command, "echo");
@@ -271,7 +274,7 @@ mod tests {
     async fn pty_manager_lifecycle() {
         let manager = PtyManager::new();
         let id = manager
-            .create("echo", &["test".to_string()], "/tmp", 80, 24)
+            .create("echo", &["test".to_string()], &temp_dir(), 80, 24)
             .await
             .unwrap();
 
@@ -286,7 +289,7 @@ mod tests {
 
     #[tokio::test]
     async fn pty_output() {
-        let mut session = PtySession::create("echo", &["hello world".to_string()], "/tmp", 80, 24)
+        let mut session = PtySession::create("echo", &["hello world".to_string()], &temp_dir(), 80, 24)
             .await
             .unwrap();
 
